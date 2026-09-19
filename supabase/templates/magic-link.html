@@ -1,0 +1,6 @@
+<h2>SYNCLE へのログイン</h2>
+<p>確認コードはこちらです。</p>
+<p style="font-size:28px;font-weight:800;letter-spacing:.2em">{{ .Token }}</p>
+<p>または、こちらのリンクからもログインできます。</p>
+<p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">ログインする</a></p>
+<p style="color:#888;font-size:12px">心当たりがない場合はこのメールを破棄してください。</p>

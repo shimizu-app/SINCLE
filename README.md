@@ -48,7 +48,41 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxxxxx
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-### 3. Supabase ダッシュボードでの設定（2か所・必須）
+### 3. Supabase の認証設定（必須）
+
+**コマンド1つで済みます。**
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth
+```
+
+トークンは https://supabase.com/dashboard/account/tokens で発行します。
+全プロジェクトを操作できるので、**終わったら失効させてください**。
+
+本番URLが決まったら、それも渡します。
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth -- --site-url https://syncle.vercel.app
+```
+
+このスクリプトがやること:
+
+| 設定 | 値 |
+|---|---|
+| Site URL | `--site-url`（既定は `.env.local` の `NEXT_PUBLIC_SITE_URL`） |
+| Redirect URLs | `http://localhost:3000/**` と Site URL 配下 |
+| Magic Link の件名と本文 | `supabase/templates/magic-link.html` |
+| Confirm signup の件名と本文 | `supabase/templates/confirmation.html` |
+
+項目名を推測して壊さないよう、**先に現在の設定を GET して、そこに存在する項目だけを PATCH** します。
+書いたあともう一度 GET して、反映されたかを1項目ずつ確認します。
+
+メールの文面を変えたいときは `supabase/templates/` の HTML を直して、もう一度流してください。
+
+<details>
+<summary>手でやる場合（ダッシュボード・2か所）</summary>
+
+
 
 コードだけでは設定できない箇所です。**ここをやらないとログインできません。**
 
@@ -76,6 +110,8 @@ Supabase の既定の雛形はリンクだけを送ります。6桁コードを�
 
 - Site URL … `https://（本番のドメイン）`
 - Redirect URLs … `http://localhost:3000/**` と `https://（本番のドメイン）/**`
+
+</details>
 
 ### 4. メール送信の上限に注意
 
