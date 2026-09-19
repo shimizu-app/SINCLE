@@ -19,6 +19,20 @@ export default function BootScreen() {
   // 行き先の判定。アニメーションとは独立に走らせる。
   useEffect(() => {
     let alive = true;
+
+    // Supabase の Redirect URLs に /auth/confirm が登録されていないと、
+    // メールのリンクは Site URL（＝ここ）に落ちてくる。
+    // そのまま起動判定に進むと黙ってログインに失敗するので拾い直す。
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code) {
+      const next = params.get("next") ?? "/";
+      router.replace(
+        `/auth/confirm?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`
+      );
+      return;
+    }
+
     fetch("/api/boot", { cache: "no-store" })
       .then((r) => r.json())
       .then((data: { next?: string }) => {
@@ -34,7 +48,7 @@ export default function BootScreen() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [router]);
 
   // 形の切り替え。動きを減らす設定のときは回さない。
   useEffect(() => {
