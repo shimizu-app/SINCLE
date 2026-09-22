@@ -4,7 +4,16 @@ import type { Database } from "@/types/supabase";
 import { SUPABASE_URL, SUPABASE_KEY, checkSupabaseEnv, supabaseEnvMessage } from "./env";
 
 /** 未ログインでも通す入口 */
-const PUBLIC_PREFIXES = ["/auth", "/join", "/booking", "/_next", "/favicon"];
+const PUBLIC_PREFIXES = [
+  "/auth",
+  "/join",
+  "/booking",
+  // 起動画面が行き先を訊きに来る。ここを閉じると未ログイン時に
+  // JSON ではなく /auth の HTML が返り、起動画面が例外側で復帰していた。
+  "/api/boot",
+  "/_next",
+  "/favicon",
+];
 
 function isPublic(pathname: string) {
   if (pathname === "/") return true; // 起動画面。中で行き先を判断する
