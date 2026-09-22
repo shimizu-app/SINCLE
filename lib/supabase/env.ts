@@ -9,31 +9,60 @@
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 export const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-/** 足りない環境変数の名前を返す。揃っていれば空配列。 */
-export function missingSupabaseEnv(): string[] {
-  const missing: string[] = [];
-  if (!SUPABASE_URL) missing.push("NEXT_PUBLIC_SUPABASE_URL");
-  if (!SUPABASE_KEY) missing.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
-  return missing;
+type Problem = { name: string; reason: string };
+
+/**
+ * 使えない環境変数を、理由つきで返す。揃っていれば空配列。
+ *
+ * 「名前ごと無い」のか「名前はあるが中身が空」なのかで直し方が違う。
+ * Vercel は空の値でも変数として登録できてしまい、
+ * 追加しようとすると「既にある」と言われる一方で
+ * ビルドからは使えない、という状態になる。
+ */
+export function checkSupabaseEnv(): Problem[] {
+  return [
+    { name: "NEXT_PUBLIC_SUPABASE_URL", value: SUPABASE_URL },
+    { name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", value: SUPABASE_KEY },
+  ]
+    .map(({ name, value }) => {
+      if (value === undefined) return { name, reason: "未設定（変数そのものが無い）" };
+      if (value.trim() === "") return { name, reason: "空（名前はあるが中身が入っていない）" };
+      return null;
+    })
+    .filter((problem): problem is Problem => problem !== null);
 }
 
-export function supabaseEnvMessage(missing: string[]): string {
+/** 足りない環境変数の名前だけを返す。 */
+export function missingSupabaseEnv(): string[] {
+  return checkSupabaseEnv().map((problem) => problem.name);
+}
+
+export function supabaseEnvMessage(problems: Problem[] = checkSupabaseEnv()): string {
+  const empty = problems.some((problem) => problem.reason.startsWith("空"));
+
   return [
-    "SYNCLE: 環境変数が設定されていません。",
+    "SYNCLE: 環境変数が使えません。",
     "",
-    ...missing.map((name) => `  - ${name}`),
+    ...problems.map((problem) => `  - ${problem.name} … ${problem.reason}`),
     "",
     "ローカル → .env.local に入れる（.env.example が見本です）",
     "Vercel   → Settings → Environment Variables に入れて Redeploy",
     "",
+    ...(empty
+      ? [
+          "「空」と出ているものは、いったん削除してから入れ直してください。",
+          "値を上書きするより、消して作り直すほうが確実です。",
+          "",
+        ]
+      : []),
     "NEXT_PUBLIC_ の値はビルド時に焼き込まれるため、",
     "あとから足した場合は必ず Redeploy が必要です。",
   ].join("\n");
 }
 
-/** 揃っていなければ、何が足りないかを書いて落とす。 */
+/** 使えなければ、何がどう駄目かを書いて落とす。 */
 export function requireSupabaseEnv(): { url: string; key: string } {
-  const missing = missingSupabaseEnv();
-  if (missing.length) throw new Error(supabaseEnvMessage(missing));
+  const problems = checkSupabaseEnv();
+  if (problems.length) throw new Error(supabaseEnvMessage(problems));
   return { url: SUPABASE_URL!, key: SUPABASE_KEY! };
 }

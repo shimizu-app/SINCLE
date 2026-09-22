@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/types/supabase";
-import { SUPABASE_URL, SUPABASE_KEY, missingSupabaseEnv, supabaseEnvMessage } from "./env";
+import { SUPABASE_URL, SUPABASE_KEY, checkSupabaseEnv, supabaseEnvMessage } from "./env";
 
 /** 未ログインでも通す入口 */
 const PUBLIC_PREFIXES = ["/auth", "/join", "/booking", "/_next", "/favicon"];
@@ -20,9 +20,9 @@ export async function updateSession(request: NextRequest) {
   // 環境変数が無いまま進むと middleware ごと落ちて、
   // どのページも MIDDLEWARE_INVOCATION_FAILED としか出なくなる。
   // 何が足りないのかを画面に出す。
-  const missing = missingSupabaseEnv();
-  if (missing.length) {
-    return new NextResponse(supabaseEnvMessage(missing), {
+  const problems = checkSupabaseEnv();
+  if (problems.length) {
+    return new NextResponse(supabaseEnvMessage(problems), {
       status: 500,
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
