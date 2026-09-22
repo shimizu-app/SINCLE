@@ -84,7 +84,25 @@ const mailConfig = {
   mailer_templates_confirmation_content: confirmation,
 };
 
-const desired = { ...urlConfig, ...mailConfig };
+// 独自SMTP。SMTP_PASS が渡されたときだけ送る。
+// 無料プランは既定のメール送信のままだと雛形を変更できないため、
+// 6桁コードを出すにはここが要る。
+const smtpPass = process.env.SMTP_PASS;
+const smtpConfig = smtpPass
+  ? {
+      smtp_host: args["smtp-host"] ?? "smtp.resend.com",
+      smtp_port: args["smtp-port"] ?? "465", // Supabase は文字列で受ける
+      smtp_user: args["smtp-user"] ?? "resend",
+      smtp_pass: smtpPass,
+      smtp_sender_name: args["smtp-name"] ?? "SYNCLE",
+      smtp_admin_email: args["smtp-sender"] ?? "onboarding@resend.dev",
+      // 既定の送信は 1時間に2通しかない。独自SMTP なら絞る理由がない。
+      // ここは数値で渡さないと 400 になる。
+      rate_limit_email_sent: Number(args["rate-limit"] ?? 30),
+    }
+  : {};
+
+const desired = { ...urlConfig, ...smtpConfig, ...mailConfig };
 
 /* ── 実行 ───────────────────────────────────────────── */
 
@@ -114,6 +132,10 @@ if (!Object.keys(known).length) {
 
 console.log("変更する項目:");
 for (const key of Object.keys(known)) {
+  if (key === "smtp_pass") {
+    console.log("   → smtp_pass（伏字）");
+    continue;
+  }
   console.log(`   ${sameValue(before[key], known[key]) ? "・" : "→"} ${key}${sameValue(before[key], known[key]) ? "（変更なし）" : ""}`);
 }
 console.log();
@@ -122,11 +144,17 @@ const pick = (source) =>
   Object.fromEntries(Object.entries(known).filter(([key]) => key in source));
 
 const urlPart = pick(urlConfig);
+const smtpPart = pick(smtpConfig);
 const mailPart = pick(mailConfig);
 
-// URL の設定を先に。ここは必ず通したい。
+// URL と SMTP を先に。雛形の変更が許されるかは SMTP の有無で決まるので、
+// 必ずこの順で送る。
 if (Object.keys(urlPart).length) {
   await call("PATCH", `/projects/${projectRef}/config/auth`, urlPart);
+}
+if (Object.keys(smtpPart).length) {
+  await call("PATCH", `/projects/${projectRef}/config/auth`, smtpPart);
+  console.log("SMTP を設定しました。雛形の変更が通るか試します…\n");
 }
 
 // 雛形はプランによって拒否される。断られても URL の設定は残す。
@@ -145,13 +173,20 @@ if (Object.keys(mailPart).length) {
 
 const after = await call("GET", `/projects/${projectRef}/config/auth`);
 
+// 書き込み専用の項目。GET では返ってこないので照合できない。
+const WRITE_ONLY = new Set(["smtp_pass"]);
+
 let ok = true;
 console.log("結果:");
 for (const [key, value] of Object.entries(known)) {
+  if (WRITE_ONLY.has(key)) {
+    console.log(`   ・ ${key}（書き込み専用のため確認不可）`);
+    continue;
+  }
   const applied = sameValue(after[key], value);
   if (!applied) ok = false;
   console.log(`   ${applied ? "✓" : "✗"} ${key}`);
-  if (!applied) {
+  if (!applied && key !== "smtp_pass") {
     console.log(`       期待: ${preview(value)}`);
     console.log(`       実際: ${preview(after[key])}`);
   }

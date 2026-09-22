@@ -65,12 +65,25 @@ SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth
 SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth -- --site-url https://syncle.vercel.app
 ```
 
-> ⚠️ **無料プランではメールの雛形を変更できません。**
+独自SMTP も一緒に設定できます（`SMTP_PASS` を渡したときだけ送ります）。
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_xxx SMTP_PASS=re_xxx \
+  npm run setup:auth -- --site-url https://sincle.vercel.app
+```
+
+既定は Resend（`smtp.resend.com` / 465 / user `resend`）。差出人は
+`--smtp-sender` で変えられます。SMTP を入れると送信上限も 1時間30通に上げます。
+
+> ⚠️ **無料プランで既定のメール送信のままだと、メールの雛形を変更できません。**
 > Supabase が `Email template modification is not available for free tier projects
 > using the default email provider` を返します。
-> そのため6桁コードは出せず、**メール内のリンクからのログイン**になります。
-> 独自SMTP（下記）を設定すると雛形が変更できるようになり、もう一度このコマンドを
-> 流せば6桁コードが出ます。URL の設定は無料プランでも入ります。
+> Supabase が `Email template modification is not available for free tier projects` を返します。
+> 独自SMTP を設定すると解禁されます。URL の設定は無料プランでも入ります。
+>
+> **リンク方式だけに頼らないこと。** メールアプリ内のブラウザでリンクを開くと
+> Cookie が別扱いになり、PKCE の照合に失敗してログインできません。
+> 6桁コードはこの問題を受けないので、SMTP を入れてコードを出すのが確実です。
 
 このスクリプトがやること:
 
