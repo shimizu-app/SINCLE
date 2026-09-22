@@ -65,6 +65,13 @@ SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth
 SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth -- --site-url https://syncle.vercel.app
 ```
 
+> ⚠️ **無料プランではメールの雛形を変更できません。**
+> Supabase が `Email template modification is not available for free tier projects
+> using the default email provider` を返します。
+> そのため6桁コードは出せず、**メール内のリンクからのログイン**になります。
+> 独自SMTP（下記）を設定すると雛形が変更できるようになり、もう一度このコマンドを
+> 流せば6桁コードが出ます。URL の設定は無料プランでも入ります。
+
 このスクリプトがやること:
 
 | 設定 | 値 |

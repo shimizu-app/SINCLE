@@ -4,7 +4,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { C } from "@/lib/design";
+import { C, SOFT } from "@/lib/design";
 import { AuthShell } from "@/components/AuthShell";
 import { OrganicButton, ShapeIcon } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
@@ -102,14 +102,27 @@ export function CodeForm({ email, next }: { email: string; next: string }) {
         <div className="flex items-center gap-3">
           <ShapeIcon shape="sun" color="yellow" size={48} face />
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold">コードを入力</h1>
+            <h1 className="text-xl font-extrabold">メールを確認</h1>
             <p className="text-xs font-bold truncate" style={{ color: "#9AA0A6" }}>
               {email} に送りました
             </p>
           </div>
         </div>
 
+        {/* Supabase の無料プランは既定のメール送信のままだと雛形を変えられず、
+            6桁コードを出せない。リンクとコードのどちらが届いても
+            迷わないよう、両方を対等に案内する。 */}
+        <p
+          className="text-sm font-bold leading-relaxed px-3.5 py-3"
+          style={{ background: SOFT.blue, color: C.blue, borderRadius: "14px 7px 14px 7px" }}
+        >
+          メール内の「ログインする」を開くとログインできます。
+        </p>
+
         <form onSubmit={onSubmit} className="space-y-4">
+          <p className="text-xs font-bold px-1" style={{ color: "#9AA0A6" }}>
+            6桁のコードが書かれている場合は、こちらに入力してください。
+          </p>
           <div className="flex gap-2 justify-between">
             {digits.map((d, i) => (
               <input
@@ -152,13 +165,13 @@ export function CodeForm({ email, next }: { email: string; next: string }) {
             </p>
           ) : (
             <button type="button" onClick={resend} className="text-xs font-bold" style={{ color: C.purple }}>
-              コードが届かない場合はこちら
+              メールが届かない場合はこちら
             </button>
           )}
         </div>
 
         <p className="text-[11px] font-bold leading-relaxed text-center" style={{ color: "#C8C2B6" }}>
-          メール内のリンクからでもログインできます。
+          迷惑メールに入っていることがあります。
         </p>
       </div>
     </AuthShell>

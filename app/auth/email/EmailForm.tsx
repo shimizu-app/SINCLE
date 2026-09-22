@@ -71,7 +71,7 @@ export function EmailForm({ next }: { next: string }) {
           <div>
             <h1 className="text-xl font-extrabold">メールアドレス</h1>
             <p className="text-xs font-bold" style={{ color: "#9AA0A6" }}>
-              6桁のコードをお送りします
+              ログイン用のメールをお送りします
             </p>
           </div>
         </div>
@@ -98,7 +98,7 @@ export function EmailForm({ next }: { next: string }) {
           )}
 
           <OrganicButton type="submit" size="lg" className="w-full" disabled={busy || !email.trim()}>
-            {busy ? "送信しています…" : "コードを送る"}
+            {busy ? "送信しています…" : "メールを送る"}
           </OrganicButton>
         </form>
 

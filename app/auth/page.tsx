@@ -54,7 +54,7 @@ export default async function AuthEntry({
             <span className="flex-1 min-w-0">
               <span className="block text-base font-extrabold">ワークスペースにログイン</span>
               <span className="block text-xs font-bold" style={{ color: "#9AA0A6" }}>
-                メールに6桁のコードを送ります
+                メールでログインします。パスワードは要りません
               </span>
             </span>
           </Link>

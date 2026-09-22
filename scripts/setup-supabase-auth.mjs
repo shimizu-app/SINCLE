@@ -66,10 +66,16 @@ const confirmation = readFileSync(join(ROOT, "supabase/templates/confirmation.ht
 
 /* ── 流し込みたい設定 ───────────────────────────────── */
 
-const desired = {
+// URL の設定と、メールの雛形は分けて送る。
+// 無料プランで既定のメール送信のままだと雛形の変更が拒否され、
+// まとめて送ると URL の設定まで巻き添えで適用されないため。
+
+const urlConfig = {
   site_url: stripSlash(siteUrl),
   uri_allow_list: redirectUrls.join(","),
+};
 
+const mailConfig = {
   mailer_subjects_magic_link: "SYNCLE のログインコード {{ .Token }}",
   mailer_templates_magic_link_content: magicLink,
 
@@ -77,6 +83,8 @@ const desired = {
   mailer_subjects_confirmation: "SYNCLE のログインコード {{ .Token }}",
   mailer_templates_confirmation_content: confirmation,
 };
+
+const desired = { ...urlConfig, ...mailConfig };
 
 /* ── 実行 ───────────────────────────────────────────── */
 
@@ -110,7 +118,28 @@ for (const key of Object.keys(known)) {
 }
 console.log();
 
-await call("PATCH", `/projects/${projectRef}/config/auth`, known);
+const pick = (source) =>
+  Object.fromEntries(Object.entries(known).filter(([key]) => key in source));
+
+const urlPart = pick(urlConfig);
+const mailPart = pick(mailConfig);
+
+// URL の設定を先に。ここは必ず通したい。
+if (Object.keys(urlPart).length) {
+  await call("PATCH", `/projects/${projectRef}/config/auth`, urlPart);
+}
+
+// 雛形はプランによって拒否される。断られても URL の設定は残す。
+let mailSkipped = null;
+if (Object.keys(mailPart).length) {
+  const result = await call("PATCH", `/projects/${projectRef}/config/auth`, mailPart, {
+    allowFailure: true,
+  });
+  if (result.error) {
+    mailSkipped = result.message;
+    for (const key of Object.keys(mailPart)) delete known[key];
+  }
+}
 
 /* ── 確認（書けたかを読み直す） ─────────────────────── */
 
@@ -132,11 +161,22 @@ if (!ok) {
   fail("\n反映されなかった項目があります。上の差分を確認してください。");
 }
 
-console.log("\n完了しました。メールに6桁コードが出るようになります。");
+if (mailSkipped) {
+  console.log("\nURL の設定は入りました。");
+  console.log("ただしメールの雛形は Supabase 側に断られました:");
+  console.log(`  ${mailSkipped}`);
+  console.log("");
+  console.log("無料プランで既定のメール送信を使っている間は雛形を変えられません。");
+  console.log("6桁コードを出すには、独自SMTP（Resend など）を設定してから");
+  console.log("もう一度このコマンドを流してください。");
+  console.log("それまではメール内のリンクからログインできます。");
+} else {
+  console.log("\n完了しました。メールに6桁コードが出るようになります。");
+}
 
 /* ── 小物 ───────────────────────────────────────────── */
 
-async function call(method, path, body) {
+async function call(method, path, body, { allowFailure = false } = {}) {
   const res = await fetch(`${API}${path}`, {
     method,
     headers: {
@@ -148,6 +188,15 @@ async function call(method, path, body) {
 
   const text = await res.text();
   if (!res.ok) {
+    if (allowFailure) {
+      let message = text.slice(0, 300);
+      try {
+        message = JSON.parse(text).message ?? message;
+      } catch {
+        // JSON でなければ本文をそのまま使う
+      }
+      return { error: true, status: res.status, message };
+    }
     if (res.status === 401) fail("トークンが無効です（401）。発行し直してください。");
     if (res.status === 403) fail("このトークンではこのプロジェクトを操作できません（403）。");
     if (res.status === 404) fail(`プロジェクト ${projectRef} が見つかりません（404）。`);
