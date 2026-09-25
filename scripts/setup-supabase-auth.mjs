@@ -73,6 +73,10 @@ const confirmation = readFileSync(join(ROOT, "supabase/templates/confirmation.ht
 const urlConfig = {
   site_url: stripSlash(siteUrl),
   uri_allow_list: redirectUrls.join(","),
+
+  // Supabase の既定は 8 桁。仕様は 6 桁なので合わせる。
+  // 画面側の NEXT_PUBLIC_OTP_LENGTH と必ず一致させること。
+  mailer_otp_length: Number(args["otp-length"] ?? 6),
 };
 
 const mailConfig = {

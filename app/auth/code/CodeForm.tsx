@@ -9,7 +9,10 @@ import { AuthShell } from "@/components/AuthShell";
 import { OrganicButton, ShapeIcon } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 
-const LENGTH = 6;
+// Supabase の mailer_otp_length に合わせる。既定は 8 なので、
+// 合わせ忘れると「桁数が違って入力できない」になる。
+// 環境変数で上書きできるようにして、片方だけ変えても詰まらないようにする。
+const LENGTH = Number(process.env.NEXT_PUBLIC_OTP_LENGTH ?? 6);
 
 export function CodeForm({ email, next }: { email: string; next: string }) {
   const router = useRouter();
@@ -121,9 +124,9 @@ export function CodeForm({ email, next }: { email: string; next: string }) {
 
         <form onSubmit={onSubmit} className="space-y-4">
           <p className="text-xs font-bold px-1" style={{ color: "#9AA0A6" }}>
-            6桁のコードが書かれている場合は、こちらに入力してください。
+            {LENGTH}桁のコードが書かれている場合は、こちらに入力してください。
           </p>
-          <div className="flex gap-2 justify-between">
+          <div className={`flex justify-between ${LENGTH > 6 ? "gap-1" : "gap-2"}`}>
             {digits.map((d, i) => (
               <input
                 key={i}
@@ -138,7 +141,9 @@ export function CodeForm({ email, next }: { email: string; next: string }) {
                 maxLength={LENGTH}
                 autoFocus={i === 0}
                 aria-label={`${i + 1}桁目`}
-                className="w-full aspect-square text-center text-2xl font-extrabold bg-white outline-none focus:border-[color:var(--syncle-purple)]"
+                className={`w-full aspect-square text-center font-extrabold bg-white outline-none focus:border-[color:var(--syncle-purple)] ${
+                  LENGTH > 6 ? "text-lg" : "text-2xl"
+                }`}
                 style={{
                   borderRadius: i % 2 ? "14px 7px 14px 7px" : "7px 14px 7px 14px",
                   border: `2.5px solid ${d ? C.purple : C.line}`,
