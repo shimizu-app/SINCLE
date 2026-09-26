@@ -1421,6 +1421,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_join_request: { Args: { p_request_id: string }; Returns: string }
+      calendar_items: {
+        Args: {
+          p_from: string
+          p_scope?: string
+          p_to: string
+          p_workspace_id: string
+        }
+        Returns: {
+          assignee_id: string
+          at: string
+          company_name: string
+          done: boolean
+          has_time: boolean
+          id: string
+          kind: string
+          priority: string
+          share: string
+          title: string
+        }[]
+      }
       can_read_channel: { Args: { p_channel: string }; Returns: boolean }
       claim_membership: { Args: never; Returns: number }
       company_facets: {
@@ -1429,6 +1450,24 @@ export type Database = {
           count: number
           kind: string
           value: string
+        }[]
+      }
+      create_group_channel: {
+        Args: {
+          p_color?: string
+          p_members?: string[]
+          p_name: string
+          p_shape?: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
+      create_invite_link: {
+        Args: { p_days?: number; p_max_uses?: number; p_workspace_id: string }
+        Returns: {
+          expires_at: string
+          max_uses: number
+          token: string
         }[]
       }
       create_workspace: {
@@ -1505,6 +1544,76 @@ export type Database = {
         Args: { p_name?: string; p_token: string }
         Returns: string
       }
+      list_channels: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          color: string
+          company_id: string
+          company_industry: string
+          company_name: string
+          id: string
+          kind: string
+          last_at: string
+          last_is_system: boolean
+          last_text: string
+          member_count: number
+          name: string
+          shape: string
+          unread: number
+        }[]
+      }
+      list_dm_threads: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          id: string
+          last_at: string
+          last_text: string
+          other_avatar: Json
+          other_id: string
+          other_name: string
+          other_role: string
+          unread: number
+        }[]
+      }
+      list_members: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          avatar: Json
+          company_count: number
+          email: string
+          id: string
+          is_admin: boolean
+          is_me: boolean
+          name: string
+          note: string
+          open_task_count: number
+          role: string
+          status: string
+        }[]
+      }
+      list_tasks: {
+        Args: { p_assignee?: string; p_done?: boolean; p_workspace_id: string }
+        Returns: {
+          assignee_avatar: Json
+          assignee_id: string
+          assignee_name: string
+          company_id: string
+          company_name: string
+          contact_name: string
+          created_at: string
+          done: boolean
+          due_at: string
+          due_has_time: boolean
+          id: string
+          priority: string
+          share: string
+          subtask_done: number
+          subtask_total: number
+          title: string
+        }[]
+      }
+      mark_channel_read: { Args: { p_channel_id: string }; Returns: undefined }
+      mark_dm_read: { Args: { p_thread_id: string }; Returns: undefined }
       my_admin_workspace_ids: { Args: never; Returns: string[] }
       my_channel_ids: { Args: never; Returns: string[] }
       my_dm_thread_ids: { Args: never; Returns: string[] }
@@ -1513,6 +1622,10 @@ export type Database = {
       my_member_ids: { Args: never; Returns: string[] }
       my_workspace_ids: { Args: never; Returns: string[] }
       normalize_company_name: { Args: { p_name: string }; Returns: string }
+      open_dm: {
+        Args: { p_other_id: string; p_workspace_id: string }
+        Returns: string
+      }
       recompute_company_tier: {
         Args: { p_company_id: string }
         Returns: undefined
@@ -1539,6 +1652,10 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: Json
+      }
+      reject_join_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
       }
       search_companies: {
         Args: {

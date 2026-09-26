@@ -1,36 +1,43 @@
+import { headers } from "next/headers";
 import { ChevronRight } from "lucide-react";
 import { C, SOFT, type ColorKey, type ShapeKey } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { SectionHead, ShapeIcon, MemberDot } from "@/components/ui";
+import { SectionHead, ShapeIcon } from "@/components/ui";
+import { MemberAdmin, type JoinRequest, type MemberInfo } from "./MemberAdmin";
 import { signOut } from "@/app/auth/actions";
-import type { Avatar } from "@/types/db";
 
 /** フェーズ1で触れるのはワークスペースとアカウントの表示だけ。 */
 const LATER: { shape: ShapeKey; color: ColorKey; title: string; desc: string; phase: string }[] = [
   { shape: "wave", color: "blue", title: "商談の進み具合", desc: "ステージの編集と、いまの流れの表示", phase: "フェーズ2" },
   { shape: "arch", color: "green", title: "Google カレンダー", desc: "連携と、チーム共有の仕組み", phase: "フェーズ6" },
   { shape: "square", color: "blue", title: "Gmail", desc: "取り込み範囲と、取り込む相手の一覧", phase: "フェーズ6" },
-  { shape: "sun", color: "yellow", title: "タスクの見せ方", desc: "会社ごと / 担当者ごと", phase: "フェーズ3" },
-  { shape: "stamp", color: "red", title: "セキュリティ", desc: "Face ID でのロック", phase: "フェーズ3" },
+  { shape: "stamp", color: "red", title: "セキュリティ", desc: "Face ID でのロック", phase: "フェーズ4" },
 ];
 
 export default async function SettingsPage() {
   const current = await requireCurrent();
   const supabase = await createClient();
 
-  const { data: members } = await supabase
-    .from("workspace_members")
-    .select("id, name, role, status, avatar, is_admin")
-    .eq("workspace_id", current.workspace.id)
-    .order("created_at", { ascending: true });
+  const [{ data: members }, { data: requests }] = await Promise.all([
+    supabase.rpc("list_members", { p_workspace_id: current.workspace.id }),
+    supabase
+      .from("join_requests")
+      .select("id, email, name, via")
+      .eq("workspace_id", current.workspace.id)
+      .order("created_at", { ascending: true }),
+  ]);
 
   const { data: stages } = await supabase
     .from("stages")
     .select("name, position")
     .eq("workspace_id", current.workspace.id)
     .order("position", { ascending: true });
+
+  // 招待リンクの見本に使う。ヘッダーから今のURLを組み立てる。
+  const host = (await headers()).get("host") ?? "localhost:3000";
+  const siteUrl = `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
 
   const card = {
     borderRadius: "26px 13px 26px 13px",
@@ -60,36 +67,18 @@ export default async function SettingsPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              {(members ?? []).map((m) => (
-                <div key={m.id} className="flex items-center gap-2.5">
-                  <MemberDot name={m.name} avatar={m.avatar as unknown as Avatar} size={32} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold truncate">
-                      {m.name}
-                      {m.is_admin && (
-                        <span
-                          className="ml-1.5 text-[10px] font-extrabold px-1.5 py-0.5"
-                          style={{ background: SOFT.purple, color: C.purple, borderRadius: "6px 3px 6px 3px" }}
-                        >
-                          管理者
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] font-bold" style={{ color: "#9AA0A6" }}>
-                      {m.role}
-                      {m.status === "invited" && " ・ 登録済み（未ログイン）"}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-[11px] font-bold leading-snug" style={{ color: "#C8C2B6" }}>
-              メンバー登録・参加申請の承認・招待リンクはフェーズ3で入ります。
-            </p>
           </div>
         </section>
+
+        {/* ── メンバーの管理（SPEC 4章の3経路） ── */}
+        <MemberAdmin
+          members={(members ?? []) as unknown as MemberInfo[]}
+          requests={(requests ?? []) as unknown as JoinRequest[]}
+          isAdmin={current.member.is_admin}
+          domain={current.workspace.domain}
+          openJoin={current.workspace.open_join}
+          siteUrl={siteUrl}
+        />
 
         <section>
           <SectionHead shape="wave" color="blue" title="いまの流れ" desc="商談の段階。編集はフェーズ2で入ります" />
