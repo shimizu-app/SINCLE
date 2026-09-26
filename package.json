@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "types:gen": "supabase gen types typescript --project-id isbtnospvbnkmhnjgsif > types/supabase.ts",
-    "setup:auth": "node scripts/setup-supabase-auth.mjs"
+    "setup:auth": "node scripts/setup-supabase-auth.mjs",
+    "db:push": "node scripts/db-push.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
