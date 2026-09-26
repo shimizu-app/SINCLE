@@ -2,32 +2,60 @@ import Link from "next/link";
 import { Mail, Plus, Settings } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
-import { createClient } from "@/lib/supabase/server";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { OrganicButton } from "@/components/ui";
+import { hasFilter, isSortKey, type CustomerQuery } from "@/lib/customers";
+import { loadCustomers } from "@/lib/customers.server";
+import { CustomerControls } from "./CustomerControls";
+import { CompanyCard } from "./CompanyCard";
 
-export default async function CustomersPage() {
+/** SCREENS 3 の上部3切り替え。進行中とキーパーソンはフェーズ5。 */
+const TABS = [
+  { key: "company", label: "会社" },
+  { key: "deals", label: "進行中" },
+  { key: "keypersons", label: "キーパーソン" },
+] as const;
+
+type Params = {
+  tab?: string;
+  q?: string;
+  tier?: string;
+  industry?: string;
+  deal?: string;
+  sort?: string;
+};
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Params>;
+}) {
   const current = await requireCurrent();
-  const supabase = await createClient();
-  const ws = current.workspace.id;
+  const params = await searchParams;
+  const tab = TABS.find((t) => t.key === params.tab)?.key ?? "company";
 
-  const [companies, tierA, openTasks, unreplied] = await Promise.all([
-    supabase.from("companies").select("id", { count: "exact", head: true })
-      .eq("workspace_id", ws).is("archived_at", null),
-    supabase.from("companies").select("id", { count: "exact", head: true })
-      .eq("workspace_id", ws).is("archived_at", null).eq("tier", "A"),
-    supabase.from("tasks").select("id", { count: "exact", head: true })
-      .eq("workspace_id", ws).eq("done", false),
-    supabase.from("mails").select("id", { count: "exact", head: true })
-      .eq("workspace_id", ws).eq("direction", "in").eq("replied", false),
-  ]);
+  const query: CustomerQuery = {
+    q: params.q,
+    tier: params.tier,
+    industry: params.industry,
+    deal: params.deal,
+    sort: isSortKey(params.sort) ? params.sort : "new",
+  };
+
+  const { companies, counts, facets, error } = await loadCustomers(current.workspace.id, query);
 
   const stats = [
-    { label: "社", value: companies.count ?? 0, color: "purple" as const },
-    { label: "Tier A", value: tierA.count ?? 0, color: "pink" as const },
-    { label: "未完了", value: openTasks.count ?? 0, color: "yellow" as const },
+    { label: "社", value: counts.companies, color: "purple" as const },
+    { label: "Tier A", value: counts.tier_a, color: "pink" as const },
+    { label: "未完了", value: counts.open_tasks, color: "yellow" as const },
   ];
+
+  const keep = (next: string) => {
+    const sp = new URLSearchParams();
+    if (next !== "company") sp.set("tab", next);
+    return sp.toString() ? `/customers?${sp}` : "/customers";
+  };
 
   return (
     <>
@@ -36,7 +64,6 @@ export default async function CustomersPage() {
         subtitle={current.workspace.name}
         actions={
           <>
-            {/* メールはナビに置かず、ここに未返信バッジ付きで置く（SCREENS） */}
             <Link
               href="/mail"
               aria-label="メール"
@@ -44,17 +71,17 @@ export default async function CustomersPage() {
               style={{ borderRadius: "14px 7px 14px 7px", background: SOFT.blue }}
             >
               <Mail size={18} strokeWidth={2.5} style={{ color: C.blue }} />
-              {(unreplied.count ?? 0) > 0 && (
+              {counts.unreplied_mails > 0 && (
                 <span
                   className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-extrabold text-white rounded-full border-2 border-white anim-badge"
                   style={{ background: C.red }}
                 >
-                  {unreplied.count}
+                  {counts.unreplied_mails}
                 </span>
               )}
             </Link>
             <Link
-              href="/scan"
+              href="/customers/new"
               aria-label="追加"
               className="w-10 h-10 flex items-center justify-center"
               style={{ borderRadius: "7px 14px 7px 14px", background: SOFT.green }}
@@ -95,18 +122,95 @@ export default async function CustomersPage() {
           ))}
         </div>
 
-        <EmptyState
-          shape="hex"
-          color="purple"
-          title="まだ顧客がいません"
-          desc={"名刺を登録すると、会社・チャンネル・最初のタスクまで\n自動で用意されます。"}
-        >
-          <Link href="/scan" className="inline-block pt-1">
-            <OrganicButton type="button" size="md" color="green">
-              名刺を登録する
-            </OrganicButton>
-          </Link>
-        </EmptyState>
+        <div className="flex gap-1.5">
+          {TABS.map((t) => {
+            const on = tab === t.key;
+            return (
+              <Link
+                key={t.key}
+                href={keep(t.key)}
+                className={`flex-1 text-center text-sm font-bold py-2.5 ${on ? "anim-chip" : ""}`}
+                style={{
+                  background: on ? SOFT.purple : "#fff",
+                  color: on ? C.purple : "#9AA0A6",
+                  border: `2px solid ${on ? C.purple : C.line}`,
+                  borderRadius: "14px 7px 14px 7px",
+                }}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {tab === "company" && (
+          <>
+            <CustomerControls facets={facets} />
+
+            {error && (
+              <p className="text-xs font-bold px-1" style={{ color: C.red }} role="alert">
+                {error}
+              </p>
+            )}
+
+            {companies.length > 0 ? (
+              <div className="space-y-2.5">
+                {hasFilter(query) && (
+                  <p className="text-xs font-bold px-1" style={{ color: "#9AA0A6" }}>
+                    {companies.length}社が該当しました
+                  </p>
+                )}
+                {companies.map((company, i) => (
+                  <CompanyCard key={company.id} company={company} index={i} />
+                ))}
+              </div>
+            ) : hasFilter(query) ? (
+              <EmptyState
+                shape="cloud"
+                color="blue"
+                title="見つかりませんでした"
+                desc={"条件を変えるか、絞り込みを外してみてください。"}
+              >
+                <Link href="/customers" className="inline-block pt-1">
+                  <OrganicButton type="button" size="md" variant="outline" color="blue">
+                    条件をすべて外す
+                  </OrganicButton>
+                </Link>
+              </EmptyState>
+            ) : (
+              <EmptyState
+                shape="hex"
+                color="purple"
+                title="まだ顧客がいません"
+                desc={"名刺を登録すると、会社・チャンネル・最初のタスクまで\n自動で用意されます。"}
+              >
+                <Link href="/customers/new" className="inline-block pt-1">
+                  <OrganicButton type="button" size="md" color="green">
+                    名刺を登録する
+                  </OrganicButton>
+                </Link>
+              </EmptyState>
+            )}
+          </>
+        )}
+
+        {tab === "deals" && (
+          <EmptyState
+            shape="sun"
+            color="orange"
+            title="進行中の案件"
+            desc={"止まっている順に並べて、放置している商談が見えるようにします。\nフェーズ5で入ります。"}
+          />
+        )}
+
+        {tab === "keypersons" && (
+          <EmptyState
+            shape="burst"
+            color="pink"
+            title="キーパーソン"
+            desc={"紹介の多い人を、ジャンル・影響範囲・県・強い層で絞り込めるようにします。\nフェーズ5で入ります。"}
+          />
+        )}
       </div>
     </>
   );
