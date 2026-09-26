@@ -13,7 +13,7 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 
 ## いまのフェーズ
 
-**フェーズ3（タスクとチャンネル）まで完了。**
+**フェーズ5（案件・書類・キーパーソン・履歴）まで完了。**
 
 | できること | 状態 |
 |---|---|
@@ -21,7 +21,7 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 | ワークスペースの作成 | ○ |
 | 事前登録（管理者がメール登録 → 本人のログインで参加） | ○ |
 | 同ドメインでの発見と参加申請 | ○ |
-| 招待リンクでの参加（`/join/{token}`） | ○ RPCと画面はあり。リンクの発行画面はフェーズ3 |
+| 招待リンクでの参加（`/join/{token}`） | ○ 発行画面は設定→メンバー |
 | 全27テーブル + RLS + Storage | ○ |
 | デザインシステム（色・書体・12シェイプ・共通部品） | ○ |
 | 名刺の手入力と登録の連鎖（会社→チャンネル→ティア→案件→初回タスク） | ○ |
@@ -29,9 +29,12 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 | タスク・チェックリスト・カレンダー・メモ | ○ |
 | 会社チャンネル・グループ・DM（Realtime同期） | ○ |
 | メンバー招待の3経路（事前登録・同ドメイン・招待リンク） | ○ |
-| 名刺スキャン（カメラ・OCR） | フェーズ4 |
-| 案件の放置判定・書類・キーパーソン・活動タイムライン | フェーズ5 |
-| Google連携・日程調整・AIメール | フェーズ6 |
+| 進行中の案件（放置日数の警告・編集・完了） | ○ |
+| 会社の履歴（メール・打合せ・タスク・会話を1本の時系列に） | ○ |
+| 書類（Storageへ保存・種類別・よく使う） | ○ |
+| キーパーソンと紹介の記録（4軸で絞り込み） | ○ |
+| 名刺スキャン（カメラ・OCR） | フェーズ4（Google Cloud Vision のキー待ち） |
+| Google連携・日程調整・AIメール | フェーズ6（Google OAuth の申請待ち） |
 
 フェーズ2以降の順番は `SPEC.md` 9章のとおりです。
 
@@ -174,6 +177,11 @@ npm run dev
 | `011_storage.sql` | Storage の3バケットとポリシー |
 | `012_revoke_anon_execute.sql` | anon からの関数実行を締める |
 | `013_revoke_public_execute.sql` | PUBLIC からの関数実行を締める |
+| `014_rls_performance.sql` | RLS を行ごとの関数呼び出しから `in (select …)` に書き換える |
+| `015_contacts_registration.sql` | ティアの計算・重複会社の検出 + 登録の連鎖 `register_contact()` |
+| `016_company_search.sql` | 会社一覧の検索・件数・絞り込みの選択肢 |
+| `017_tasks_channels.sql` | タスク・カレンダー・チャンネル・DM・メンバー招待の RPC |
+| `018_deals_timeline.sql` | 進行中の案件・活動タイムライン・キーパーソンの RPC |
 
 **RLS は各テーブルの作成直後に有効化しています**（SPEC 0章）。
 
@@ -204,6 +212,23 @@ npx supabase gen types typescript --project-id <project-ref> > types/supabase.ts
 
 `types/supabase.ts` は自動生成です。業務上のユニオン型は `types/db.ts` に手で置いています。
 
+### 通し確認（本番に触らない）
+
+```bash
+npm run db:test
+```
+
+手元の PostgreSQL に使い捨てのデータベースを作り、`001`〜`018` を順に当てて、
+登録の連鎖・案件・履歴・書類・キーパーソンを実際に動かします。
+続けて**別のワークスペースから1件も見えないこと**（RLS）も確かめます。
+終わったらデータベースは消します。本番のプロジェクトには一切繋ぎません。
+
+`postgresql-16` が要ります（`initdb` / `pg_ctl` / `psql`）。
+別の場所に入っている場合は `PGBIN=/usr/lib/postgresql/17/bin npm run db:test` のように渡してください。
+
+`auth.uid()` や Storage など Supabase が用意している部分は
+`supabase/test/shim.sql` が最小限だけ代役を務めます。マイグレーションには手を入れません。
+
 ---
 
 ## ディレクトリ
@@ -225,6 +250,7 @@ types/
   supabase.ts           自動生成
   db.ts                 手で定義するユニオン型
 supabase/migrations/    マイグレーション
+supabase/test/          手元の PostgreSQL で流す通し確認
 ```
 
 ---

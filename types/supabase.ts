@@ -1452,6 +1452,29 @@ export type Database = {
           value: string
         }[]
       }
+      company_timeline: {
+        Args: {
+          p_company_id: string
+          p_filter?: string
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: {
+          at: string
+          author_avatar: Json
+          author_name: string
+          body: string
+          direction: string
+          done: boolean
+          id: string
+          kind: string
+          title: string
+        }[]
+      }
+      complete_deal: {
+        Args: { p_deal_id: string; p_note?: string }
+        Returns: undefined
+      }
       create_group_channel: {
         Args: {
           p_color?: string
@@ -1544,6 +1567,14 @@ export type Database = {
         Args: { p_name?: string; p_token: string }
         Returns: string
       }
+      key_person_facets: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          count: number
+          kind: string
+          value: string
+        }[]
+      }
       list_channels: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -1562,6 +1593,26 @@ export type Database = {
           unread: number
         }[]
       }
+      list_deals: {
+        Args: { p_sort?: string; p_workspace_id: string }
+        Returns: {
+          amount: string
+          company_id: string
+          company_industry: string
+          company_name: string
+          contact_name: string
+          days_since_update: number
+          deal_type: string
+          id: string
+          memo: string
+          open_task_count: number
+          owner_avatar: Json
+          owner_id: string
+          owner_name: string
+          status: string
+          updated_at: string
+        }[]
+      }
       list_dm_threads: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -1573,6 +1624,33 @@ export type Database = {
           other_name: string
           other_role: string
           unread: number
+        }[]
+      }
+      list_key_persons: {
+        Args: {
+          p_genres?: string[]
+          p_layers?: string[]
+          p_prefs?: string[]
+          p_scopes?: string[]
+          p_workspace_id: string
+        }
+        Returns: {
+          about: string
+          city: string
+          company_name: string
+          genre: string
+          id: string
+          kana: string
+          layers: string[]
+          met: string
+          name: string
+          network: string
+          pref: string
+          referral_count: number
+          scope: string
+          sub_genres: string[]
+          tags: string[]
+          title: string
         }[]
       }
       list_members: {
@@ -1611,6 +1689,10 @@ export type Database = {
           subtask_total: number
           title: string
         }[]
+      }
+      log_activity: {
+        Args: { p_company_id: string; p_text: string }
+        Returns: string
       }
       mark_channel_read: { Args: { p_channel_id: string }; Returns: undefined }
       mark_dm_read: { Args: { p_thread_id: string }; Returns: undefined }

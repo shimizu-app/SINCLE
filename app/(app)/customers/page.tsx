@@ -7,8 +7,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { OrganicButton } from "@/components/ui";
 import { hasFilter, isSortKey, type CustomerQuery } from "@/lib/customers";
 import { loadCustomers } from "@/lib/customers.server";
+import { createClient } from "@/lib/supabase/server";
 import { CustomerControls } from "./CustomerControls";
 import { CompanyCard } from "./CompanyCard";
+import { DealList, type DealRow, type Owner } from "./DealList";
+import {
+  KeyPersons, type ContactOption, type KeyFacet, type KeyPersonRow, type Referral,
+} from "./KeyPersons";
 
 /** SCREENS 3 の上部3切り替え。進行中とキーパーソンはフェーズ5。 */
 const TABS = [
@@ -19,6 +24,10 @@ const TABS = [
 
 type Params = {
   tab?: string;
+  genre?: string | string[];
+  scope?: string | string[];
+  pref?: string | string[];
+  layer?: string | string[];
   q?: string;
   tier?: string;
   industry?: string;
@@ -44,6 +53,63 @@ export default async function CustomersPage({
   };
 
   const { companies, counts, facets, error } = await loadCustomers(current.workspace.id, query);
+
+  // 進行中とキーパーソンは、そのタブを開いたときだけ引く
+  const supabase = await createClient();
+  const ws = current.workspace.id;
+  const many = (v: string | string[] | undefined) =>
+    v === undefined ? undefined : Array.isArray(v) ? v : [v];
+
+  const [dealsRes, ownersRes] =
+    tab === "deals"
+      ? await Promise.all([
+          supabase.rpc("list_deals", { p_workspace_id: ws, p_sort: "stale" }),
+          supabase
+            .from("workspace_members")
+            .select("id, name")
+            .eq("workspace_id", ws)
+            .eq("status", "active")
+            .order("created_at"),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+  const [keyRes, refRes, keyFacetRes, contactRes] =
+    tab === "keypersons"
+      ? await Promise.all([
+          supabase.rpc("list_key_persons", {
+            p_workspace_id: ws,
+            p_genres: many(params.genre),
+            p_scopes: many(params.scope),
+            p_prefs: many(params.pref),
+            p_layers: many(params.layer),
+          }),
+          supabase
+            .from("referrals")
+            .select("id, key_person_id, to_name, result, happened_at")
+            .eq("workspace_id", ws)
+            .order("happened_at", { ascending: false, nullsFirst: false }),
+          supabase.rpc("key_person_facets", { p_workspace_id: ws }),
+          supabase
+            .from("contacts")
+            .select("id, name, title, companies(name)")
+            .eq("workspace_id", ws)
+            .is("archived_at", null)
+            .order("created_at", { ascending: false })
+            .limit(200),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+
+  const contactOptions: ContactOption[] = ((contactRes.data ?? []) as unknown as {
+    id: string;
+    name: string;
+    title: string | null;
+    companies: { name: string } | null;
+  }[]).map((c) => ({
+    id: c.id,
+    name: c.name,
+    title: c.title,
+    company: c.companies?.name ?? "",
+  }));
 
   const stats = [
     { label: "社", value: counts.companies, color: "purple" as const },
@@ -195,20 +261,18 @@ export default async function CustomersPage({
         )}
 
         {tab === "deals" && (
-          <EmptyState
-            shape="sun"
-            color="orange"
-            title="進行中の案件"
-            desc={"止まっている順に並べて、放置している商談が見えるようにします。\nフェーズ5で入ります。"}
+          <DealList
+            deals={(dealsRes.data ?? []) as unknown as DealRow[]}
+            owners={(ownersRes.data ?? []) as unknown as Owner[]}
           />
         )}
 
         {tab === "keypersons" && (
-          <EmptyState
-            shape="burst"
-            color="pink"
-            title="キーパーソン"
-            desc={"紹介の多い人を、ジャンル・影響範囲・県・強い層で絞り込めるようにします。\nフェーズ5で入ります。"}
+          <KeyPersons
+            people={(keyRes.data ?? []) as unknown as KeyPersonRow[]}
+            referrals={(refRes.data ?? []) as unknown as Referral[]}
+            facets={(keyFacetRes.data ?? []) as unknown as KeyFacet[]}
+            contacts={contactOptions}
           />
         )}
       </div>

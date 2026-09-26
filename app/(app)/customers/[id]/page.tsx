@@ -11,14 +11,16 @@ import { EmptyState } from "@/components/EmptyState";
 import { ShapeIcon, TierChip, DealChip } from "@/components/ui";
 import { CompanyOverview } from "./CompanyOverview";
 import { ContactList } from "./ContactList";
+import { Timeline, type TimelineItem } from "./Timeline";
+import { Documents, type DocRow } from "./Documents";
 import type { Tier } from "@/types/db";
 
 const TABS = [
   { key: "overview", label: "概要", phase: null },
   { key: "contacts", label: "名刺", phase: null },
-  { key: "timeline", label: "履歴", phase: "フェーズ5" },
+  { key: "timeline", label: "履歴", phase: null },
+  { key: "documents", label: "書類", phase: null },
   { key: "tasks", label: "タスク", phase: "フェーズ3" },
-  { key: "documents", label: "書類", phase: "フェーズ5" },
   { key: "mail", label: "メール", phase: "フェーズ6" },
   { key: "channel", label: "チャンネル", phase: "フェーズ3" },
 ] as const;
@@ -28,11 +30,11 @@ export default async function CompanyPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; f?: string; n?: string }>;
 }) {
   const current = await requireCurrent();
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab, f, n } = await searchParams;
   const tab = TABS.find((t) => t.key === rawTab) ?? TABS[0];
 
   const supabase = await createClient();
@@ -76,6 +78,30 @@ export default async function CompanyPage({
     },
     { score: 0, title: null as string | null }
   );
+
+  const timelineLimit = Math.min(Number(n) || 30, 300);
+  const [{ data: timeline }, { data: docs }] =
+    tab.key === "timeline" || tab.key === "documents"
+      ? await Promise.all([
+          tab.key === "timeline"
+            ? supabase.rpc("company_timeline", {
+                p_company_id: id,
+                p_filter: f ?? "all",
+                p_limit: timelineLimit + 1,
+              })
+            : Promise.resolve({ data: [] }),
+          tab.key === "documents"
+            ? supabase
+                .from("documents")
+                .select("id, name, kind, note, pinned, size_bytes, created_at")
+                .eq("company_id", id)
+                .order("created_at", { ascending: false })
+            : Promise.resolve({ data: [] }),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+  const timelineItems = (timeline ?? []) as unknown as TimelineItem[];
+  const hasMore = timelineItems.length > timelineLimit;
 
   const art = companyArt(company.industry ?? undefined, company.deal_type ?? undefined);
   const tier = (company.tier_manual ?? company.tier) as Tier | null;
@@ -173,6 +199,21 @@ export default async function CompanyPage({
             contacts={contacts ?? []}
             primaryContactId={company.primary_contact_id}
           />
+        )}
+
+        {tab.key === "timeline" && (
+          <Timeline
+            companyId={id}
+            items={timelineItems.slice(0, timelineLimit)}
+            filter={f ?? "all"}
+            hasMore={hasMore}
+            myName={current.member.name}
+            myAvatar={current.member.avatar}
+          />
+        )}
+
+        {tab.key === "documents" && (
+          <Documents companyId={id} docs={(docs ?? []) as unknown as DocRow[]} />
         )}
 
         {tab.phase && (

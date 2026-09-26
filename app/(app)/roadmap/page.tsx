@@ -13,7 +13,7 @@ export default async function RoadmapPage() {
           shape="burst"
           color="orange"
           title="議題はまだありません"
-          desc={"部署ごと・月ごとの議題とロードマップ図はフェーズ5以降で入ります。"}
+          desc={"部署ごと・月ごとの議題とロードマップ図は、このあとの回で入ります。"}
         />
       </div>
     </>
