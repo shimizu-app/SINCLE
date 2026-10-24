@@ -74,7 +74,7 @@ SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth
 本番URLが決まったら、それも渡します。
 
 ```bash
-SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth -- --site-url https://syncle.vercel.app
+SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth -- --site-url https://sincle.vercel.app
 ```
 
 独自SMTP も一緒に設定できます（`SMTP_PASS` を渡したときだけ送ります）。
