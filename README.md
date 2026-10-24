@@ -13,7 +13,7 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 
 ## いまのフェーズ
 
-**フェーズ5（案件・書類・キーパーソン・履歴）まで完了。**
+**フェーズ5まで完了。フェーズ4（名刺スキャン）も実装済みで、鍵を入れれば動きます。**
 
 | できること | 状態 |
 |---|---|
@@ -35,7 +35,7 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 | キーパーソンと紹介の記録（4軸で絞り込み） | ○ |
 | 会社詳細の7タブ（概要・名刺・履歴・書類・タスク・チャンネル） | ○ メールだけフェーズ6 |
 | 商談の段階（ステージ）の編集 | ○ 設定から。変えられるのは管理者だけ |
-| 名刺スキャン（カメラ・OCR） | フェーズ4（Google Cloud Vision のキー待ち） |
+| 名刺スキャン（カメラ・OCR・まとめ読み） | ○ 鍵を入れると動く（下記） |
 | Google連携・日程調整・AIメール | フェーズ6（Google OAuth の申請待ち） |
 
 フェーズ2以降の順番は `SPEC.md` 9章のとおりです。
@@ -145,14 +145,45 @@ Supabase の既定の雛形はリンクだけを送ります。6桁コードを�
 
 </details>
 
-### 4. メール送信の上限に注意
+### 4. 名刺の読み取り（任意・フェーズ4）
+
+名刺を撮って読み取るには Google Cloud Vision の鍵が要ります。
+**入れなくてもアプリは動きます**（スキャン画面が手入力へ案内するだけ）。
+
+1. Google Cloud のプロジェクトで **Cloud Vision API** を有効にする
+2. サービスアカウントを作り、**JSON キー**を1つ作ってダウンロードする
+3. その JSON を base64 にして `GOOGLE_VISION_SA_KEY` に入れる
+
+```bash
+base64 -w0 nico-app-xxxxxx.json    # Linux（macOS は -i）
+```
+
+```
+GOOGLE_VISION_SA_KEY=ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgLi4uCn0=
+```
+
+Vercel にも同じ名前で入れて Redeploy します。
+`NEXT_PUBLIC_` は付けません（付けるとブラウザに渡ってしまいます）。
+
+**課金アカウントの紐づけが必要です。**
+Vision は文字の読み取りが月1,000枚まで無料ですが、
+プロジェクトに課金アカウントが付いていないと呼び出し自体が断られます。
+その場合は画面に「課金アカウントが紐づいていません」と出ます。
+
+読み取りがうまくいかないときは、画面に Google からの文言がそのまま出ます。
+`403` が出るならサービスアカウントの権限、`billing` が出るなら課金の設定です。
+
+ライブラリは足していません。`node:crypto` で JWT に署名して
+アクセストークンに交換しています（`lib/vision.ts`）。
+
+### 5. メール送信の上限に注意
 
 Supabase の既定のメール送信は**1時間あたり数通**に制限されています。
 検証でログインを繰り返すとすぐに詰まります。実際に使い始める前に
 独自SMTP（Resend など）へ切り替えてください。
 **Authentication → Emails → SMTP Settings** から設定します。
 
-### 5. 起動
+### 6. 起動
 
 ```bash
 npm run dev
@@ -215,6 +246,17 @@ npx supabase gen types typescript --project-id <project-ref> > types/supabase.ts
 
 `types/supabase.ts` は自動生成です。業務上のユニオン型は `types/db.ts` に手で置いています。
 
+### 名刺の振り分けの確認
+
+```bash
+npm run test:card
+```
+
+OCR の文字列を会社名・氏名・役職・部署・メール・電話・Web・住所に
+振り分けるところ（`lib/card.ts`）だけを確かめます。
+ネットワークには出ません。依存も足していません
+（Node の `--experimental-strip-types` で TypeScript をそのまま読みます）。
+
 ### 通し確認（本番に触らない）
 
 ```bash
@@ -247,6 +289,8 @@ components/
   ui/                   デザインシステムの共通部品
 lib/
   design.ts             色・形・分類・判定ロジック（仕様書から無改変）
+  vision.ts             Google Cloud Vision（サーバー専用）
+  card.ts               読み取った文字を各欄に振り分ける
   supabase/             クライアント（ブラウザ / サーバー / middleware）
   workspace.ts          いま開いているワークスペースの解決
 types/
@@ -254,6 +298,7 @@ types/
   db.ts                 手で定義するユニオン型
 supabase/migrations/    マイグレーション
 supabase/test/          手元の PostgreSQL で流す通し確認
+test/                   名刺の振り分けの確認（npm run test:card）
 ```
 
 ---

@@ -10,7 +10,8 @@
     "types:gen": "node scripts/gen-types.mjs",
     "setup:auth": "node scripts/setup-supabase-auth.mjs",
     "db:push": "node scripts/db-push.mjs",
-    "db:test": "bash supabase/test/run.sh"
+    "db:test": "bash supabase/test/run.sh",
+    "test:card": "node --experimental-strip-types --import ./test/loader.mjs --test test/card.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

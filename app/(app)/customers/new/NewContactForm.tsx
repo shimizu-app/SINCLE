@@ -26,15 +26,38 @@ const field = {
   border: `2px solid ${C.line}`,
 } as const;
 
-export function NewContactForm({ workspaceId }: { workspaceId: string }) {
+/**
+ * 名刺の読み取り（フェーズ4）から渡される初期値。
+ * 当たっていないこともあるので、入れたうえで必ず直せるようにしておく。
+ */
+export type InitialFields = {
+  companyName?: string;
+  contactName?: string;
+  dept?: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  web?: string;
+};
+
+export function NewContactForm({
+  workspaceId,
+  initial,
+  scanned = false,
+}: {
+  workspaceId: string;
+  initial?: InitialFields;
+  scanned?: boolean;
+}) {
   const [state, action, pending] = useActionState<RegisterResult, FormData>(
     registerContact,
     undefined
   );
 
   const [step, setStep] = useState<1 | 2>(1);
-  const [companyName, setCompanyName] = useState("");
-  const [title, setTitle] = useState("");
+  const [companyName, setCompanyName] = useState(initial?.companyName ?? "");
+  const [title, setTitle] = useState(initial?.title ?? "");
   const [employees, setEmployees] = useState("");
   const [tierManual, setTierManual] = useState("");
   const [similar, setSimilar] = useState<Similar[]>([]);
@@ -67,7 +90,9 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
     <form action={action}>
       <ScreenHeader
         title={step === 1 ? "名刺を登録" : "案件のこと"}
-        subtitle={step === 1 ? "① 基本情報" : "② どんな話か"}
+        subtitle={
+          step === 1 ? (scanned ? "① 読み取った内容を確かめる" : "① 基本情報") : "② どんな話か"
+        }
         actions={
           <Link
             href="/customers"
@@ -173,6 +198,7 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
           <Section label="名刺の人">
             <input
               name="contactName"
+              defaultValue={initial?.contactName ?? ""}
               placeholder="山田 太郎"
               className="w-full px-4 py-3 text-base bg-white outline-none"
               style={field}
@@ -180,6 +206,7 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
             <div className="grid grid-cols-2 gap-2">
               <input
                 name="dept"
+                defaultValue={initial?.dept ?? ""}
                 placeholder="部署"
                 className="w-full px-4 py-3 text-sm bg-white outline-none"
                 style={field}
@@ -197,6 +224,7 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
               name="email"
               type="email"
               inputMode="email"
+              defaultValue={initial?.email ?? ""}
               placeholder="メール"
               className="w-full px-4 py-3 text-sm bg-white outline-none"
               style={field}
@@ -205,6 +233,7 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
               name="phone"
               type="tel"
               inputMode="tel"
+              defaultValue={initial?.phone ?? ""}
               placeholder="電話"
               className="w-full px-4 py-3 text-sm bg-white outline-none"
               style={{ ...field, borderRadius: "11px 22px 11px 22px" }}
@@ -259,6 +288,7 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
               </div>
               <input
                 name="address"
+                defaultValue={initial?.address ?? ""}
                 placeholder="所在地"
                 className="w-full px-4 py-3 text-sm bg-white outline-none"
                 style={field}
@@ -266,6 +296,7 @@ export function NewContactForm({ workspaceId }: { workspaceId: string }) {
               <input
                 name="web"
                 inputMode="url"
+                defaultValue={initial?.web ?? ""}
                 placeholder="Web"
                 className="w-full px-4 py-3 text-sm bg-white outline-none"
                 style={{ ...field, borderRadius: "11px 22px 11px 22px" }}
