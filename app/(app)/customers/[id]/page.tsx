@@ -13,16 +13,20 @@ import { CompanyOverview } from "./CompanyOverview";
 import { ContactList } from "./ContactList";
 import { Timeline, type TimelineItem } from "./Timeline";
 import { Documents, type DocRow } from "./Documents";
-import type { Tier } from "@/types/db";
+import { CompanyTasks } from "./CompanyTasks";
+import { CompanyProgress } from "./CompanyProgress";
+import { MessageStream, type StreamMessage } from "../../channels/MessageStream";
+import type { Subtask, TaskRow } from "../../tasks/TaskList";
+import type { Avatar, Tier } from "@/types/db";
 
 const TABS = [
   { key: "overview", label: "概要", phase: null },
   { key: "contacts", label: "名刺", phase: null },
   { key: "timeline", label: "履歴", phase: null },
   { key: "documents", label: "書類", phase: null },
-  { key: "tasks", label: "タスク", phase: "フェーズ3" },
+  { key: "tasks", label: "タスク", phase: null },
   { key: "mail", label: "メール", phase: "フェーズ6" },
-  { key: "channel", label: "チャンネル", phase: "フェーズ3" },
+  { key: "channel", label: "チャンネル", phase: null },
 ] as const;
 
 export default async function CompanyPage({
@@ -102,6 +106,89 @@ export default async function CompanyPage({
 
   const timelineItems = (timeline ?? []) as unknown as TimelineItem[];
   const hasMore = timelineItems.length > timelineLimit;
+
+  // ── タスクタブ ──
+  // list_tasks は会社で絞れる（019）。まだ当てていないデータベースでも
+  // 画面が白くならないよう、絞り込みが通らなければ全件から選ぶ。
+  async function companyTasks(done: boolean): Promise<TaskRow[]> {
+    const filtered = await supabase.rpc("list_tasks", {
+      p_workspace_id: current.workspace.id,
+      p_done: done,
+      p_company_id: id,
+    });
+    if (!filtered.error) return (filtered.data ?? []) as unknown as TaskRow[];
+
+    const all = await supabase.rpc("list_tasks", {
+      p_workspace_id: current.workspace.id,
+      p_done: done,
+    });
+    return ((all.data ?? []) as unknown as TaskRow[]).filter((t) => t.company_id === id);
+  }
+
+  const [openRows, doneRows, membersRes] =
+    tab.key === "tasks"
+      ? await Promise.all([
+          companyTasks(false),
+          companyTasks(true),
+          supabase
+            .from("workspace_members")
+            .select("id, name")
+            .eq("workspace_id", current.workspace.id)
+            .eq("status", "active")
+            .order("created_at"),
+        ])
+      : [[] as TaskRow[], [] as TaskRow[], { data: [] }];
+
+  const taskIds = [...openRows, ...doneRows].map((t) => t.id);
+  const { data: subtaskRows } = taskIds.length
+    ? await supabase
+        .from("subtasks")
+        .select("id, text, done, task_id")
+        .in("task_id", taskIds)
+        .order("position")
+    : { data: [] };
+
+  // ── チャンネルタブ ──
+  const [{ data: channel }, { data: people }] =
+    tab.key === "channel"
+      ? await Promise.all([
+          supabase
+            .from("channels")
+            .select("id")
+            .eq("company_id", id)
+            .eq("kind", "company")
+            .maybeSingle(),
+          supabase
+            .from("workspace_members")
+            .select("id, name, avatar")
+            .eq("workspace_id", current.workspace.id),
+        ])
+      : [{ data: null }, { data: [] }];
+
+  const peopleMap = Object.fromEntries(
+    (people ?? []).map((p) => [p.id, { name: p.name, avatar: p.avatar as unknown as Avatar }])
+  );
+
+  // 新しい方から200件取って、表示のために古い順へ戻す。
+  // 昇順のまま limit を掛けると、会話が伸びたときに古い200件が出てしまう。
+  const { data: messageRows } = channel
+    ? await supabase
+        .from("messages")
+        .select("id, text, created_at, author_id, is_system")
+        .eq("channel_id", channel.id)
+        .order("created_at", { ascending: false })
+        .limit(200)
+    : { data: [] };
+
+  const messages: StreamMessage[] = (messageRows ?? []).reverse().map((m) => ({
+    id: m.id,
+    text: m.text,
+    created_at: m.created_at,
+    author_id: m.author_id,
+    author_name: m.author_id ? peopleMap[m.author_id]?.name ?? null : null,
+    author_avatar: m.author_id ? peopleMap[m.author_id]?.avatar ?? null : null,
+    is_system: m.is_system,
+  }));
 
   const art = companyArt(company.industry ?? undefined, company.deal_type ?? undefined);
   const tier = (company.tier_manual ?? company.tier) as Tier | null;
@@ -216,6 +303,60 @@ export default async function CompanyPage({
           <Documents companyId={id} docs={(docs ?? []) as unknown as DocRow[]} />
         )}
 
+        {tab.key === "tasks" && (
+          <CompanyTasks
+            companyId={id}
+            companyName={company.name}
+            stages={stages ?? []}
+            stageId={company.stage_id}
+            tasks={openRows}
+            doneTasks={doneRows}
+            subtasks={(subtaskRows ?? []) as unknown as Subtask[]}
+            members={membersRes.data ?? []}
+            myMemberId={current.member.id}
+          />
+        )}
+
+        {tab.key === "channel" && (
+          <>
+            <CompanyProgress
+              companyId={id}
+              stages={stages ?? []}
+              stageId={company.stage_id}
+              openTasks={openTasks ?? 0}
+              editable={false}
+            />
+            <div className="flex gap-2">
+              <Link
+                href={`/customers/${id}?tab=tasks`}
+                className="text-xs font-bold px-3 py-2"
+                style={{
+                  color: C.purple,
+                  background: "#fff",
+                  border: `2px solid ${C.line}`,
+                  borderRadius: "14px 7px 14px 7px",
+                }}
+              >
+                進捗を見る
+              </Link>
+              {channel && (
+                <Link
+                  href={`/channels/${channel.id}`}
+                  className="text-xs font-bold px-3 py-2"
+                  style={{
+                    color: "#9AA0A6",
+                    background: "#fff",
+                    border: `2px solid ${C.line}`,
+                    borderRadius: "14px 7px 14px 7px",
+                  }}
+                >
+                  チャンネル画面で開く
+                </Link>
+              )}
+            </div>
+          </>
+        )}
+
         {tab.phase && (
           <EmptyState
             shape="cloud"
@@ -225,6 +366,28 @@ export default async function CompanyPage({
           />
         )}
       </div>
+
+      {/* 会話は入力欄を画面下に固定するので、余白つきの囲みの外に出す */}
+      {tab.key === "channel" &&
+        (channel ? (
+          <MessageStream
+            kind="channel"
+            targetId={channel.id}
+            initial={messages}
+            myMemberId={current.member.id}
+            people={peopleMap}
+            placeholder={`${company.name} について`}
+          />
+        ) : (
+          <div className="px-4 pb-4">
+            <EmptyState
+              shape="cloud"
+              color="blue"
+              title="チャンネルがありません"
+              desc={"会社チャンネルは名刺の登録でできます。\n古い会社には無いことがあります。"}
+            />
+          </div>
+        ))}
     </>
   );
 }

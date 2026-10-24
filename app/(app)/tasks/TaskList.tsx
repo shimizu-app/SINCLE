@@ -138,7 +138,7 @@ export function TaskList({
   );
 }
 
-function TaskCard({ task, index, subtasks }: { task: TaskRow; index: number; subtasks: Subtask[] }) {
+export function TaskCard({ task, index, subtasks }: { task: TaskRow; index: number; subtasks: Subtask[] }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();

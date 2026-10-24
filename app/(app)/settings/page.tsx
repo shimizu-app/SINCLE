@@ -1,16 +1,15 @@
 import { headers } from "next/headers";
-import { ChevronRight } from "lucide-react";
-import { C, SOFT, type ColorKey, type ShapeKey } from "@/lib/design";
+import { C, type ColorKey, type ShapeKey } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHead, ShapeIcon } from "@/components/ui";
 import { MemberAdmin, type JoinRequest, type MemberInfo } from "./MemberAdmin";
+import { StageAdmin, type StageRow } from "./StageAdmin";
 import { signOut } from "@/app/auth/actions";
 
-/** フェーズ1で触れるのはワークスペースとアカウントの表示だけ。 */
+/** まだ入っていない設定。入ったものはここから外す。 */
 const LATER: { shape: ShapeKey; color: ColorKey; title: string; desc: string; phase: string }[] = [
-  { shape: "wave", color: "blue", title: "商談の進み具合", desc: "ステージの編集と、いまの流れの表示", phase: "フェーズ2" },
   { shape: "arch", color: "green", title: "Google カレンダー", desc: "連携と、チーム共有の仕組み", phase: "フェーズ6" },
   { shape: "square", color: "blue", title: "Gmail", desc: "取り込み範囲と、取り込む相手の一覧", phase: "フェーズ6" },
   { shape: "stamp", color: "red", title: "セキュリティ", desc: "Face ID でのロック", phase: "フェーズ4" },
@@ -31,7 +30,7 @@ export default async function SettingsPage() {
 
   const { data: stages } = await supabase
     .from("stages")
-    .select("name, position")
+    .select("id, name, position")
     .eq("workspace_id", current.workspace.id)
     .order("position", { ascending: true });
 
@@ -81,24 +80,8 @@ export default async function SettingsPage() {
         />
 
         <section>
-          <SectionHead shape="wave" color="blue" title="いまの流れ" desc="商談の段階。編集はフェーズ2で入ります" />
-          <div className="bg-white p-4" style={{ ...card, borderRadius: "13px 26px 13px 26px" }}>
-            <div className="flex items-center gap-1 flex-wrap">
-              {(stages ?? []).map((s, i) => (
-                <span key={s.position} className="flex items-center gap-1">
-                  <span
-                    className="text-xs font-bold px-2.5 py-1.5"
-                    style={{ background: SOFT.blue, color: C.blue, borderRadius: "10px 5px 10px 5px" }}
-                  >
-                    {s.name}
-                  </span>
-                  {i < (stages ?? []).length - 1 && (
-                    <ChevronRight size={13} strokeWidth={3} style={{ color: "#C8C2B6" }} />
-                  )}
-                </span>
-              ))}
-            </div>
-          </div>
+          <SectionHead shape="wave" color="blue" title="商談の進み具合" desc="いまの流れ。段階の名前と並びを変えられます" />
+          <StageAdmin stages={(stages ?? []) as StageRow[]} isAdmin={current.member.is_admin} />
         </section>
 
         <section>

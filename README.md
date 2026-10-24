@@ -33,6 +33,8 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 | 会社の履歴（メール・打合せ・タスク・会話を1本の時系列に） | ○ |
 | 書類（Storageへ保存・種類別・よく使う） | ○ |
 | キーパーソンと紹介の記録（4軸で絞り込み） | ○ |
+| 会社詳細の7タブ（概要・名刺・履歴・書類・タスク・チャンネル） | ○ メールだけフェーズ6 |
+| 商談の段階（ステージ）の編集 | ○ 設定から。変えられるのは管理者だけ |
 | 名刺スキャン（カメラ・OCR） | フェーズ4（Google Cloud Vision のキー待ち） |
 | Google連携・日程調整・AIメール | フェーズ6（Google OAuth の申請待ち） |
 
@@ -182,6 +184,7 @@ npm run dev
 | `016_company_search.sql` | 会社一覧の検索・件数・絞り込みの選択肢 |
 | `017_tasks_channels.sql` | タスク・カレンダー・チャンネル・DM・メンバー招待の RPC |
 | `018_deals_timeline.sql` | 進行中の案件・活動タイムライン・キーパーソンの RPC |
+| `019_company_tasks_stages.sql` | `list_tasks` に会社の絞り込み／ステージの書き換えを管理者だけに |
 
 **RLS は各テーブルの作成直後に有効化しています**（SPEC 0章）。
 

@@ -1670,7 +1670,12 @@ export type Database = {
         }[]
       }
       list_tasks: {
-        Args: { p_assignee?: string; p_done?: boolean; p_workspace_id: string }
+        Args: {
+          p_assignee?: string
+          p_company_id?: string
+          p_done?: boolean
+          p_workspace_id: string
+        }
         Returns: {
           assignee_avatar: Json
           assignee_id: string

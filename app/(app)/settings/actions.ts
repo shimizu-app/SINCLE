@@ -100,3 +100,118 @@ export async function setOpenJoin(open: boolean) {
   if (error) return { error: error.message };
   revalidatePath("/settings");
 }
+
+/* ── 商談の進み具合（ステージ）──────────────────────────────
+   ワークスペース全体の共有設定なので、書き換えは管理者だけ。
+   画面で隠すだけでなく RLS でも閉めてある（019）。          */
+
+export type StageResult = { error: string } | { ok: string } | undefined;
+
+export async function addStage(_prev: StageResult, form: FormData): Promise<StageResult> {
+  const current = await requireCurrent();
+  if (!current.member.is_admin) return { error: "ステージを変えられるのは管理者だけです。" };
+
+  const name = String(form.get("name") ?? "").trim();
+  if (!name) return { error: "段階の名前を入力してください。" };
+  if (name.length > 20) return { error: "名前が長すぎます（20文字まで）。" };
+
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("stages")
+    .select("position")
+    .eq("workspace_id", current.workspace.id)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("stages").insert({
+    workspace_id: current.workspace.id,
+    name,
+    position: (last?.position ?? -1) + 1,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  return { ok: `${name} を足しました。` };
+}
+
+export async function renameStage(stageId: string, name: string) {
+  const current = await requireCurrent();
+  if (!current.member.is_admin) return { error: "管理者だけが変えられます。" };
+
+  const clean = name.trim();
+  if (!clean) return { error: "名前を入力してください。" };
+  if (clean.length > 20) return { error: "名前が長すぎます（20文字まで）。" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stages")
+    .update({ name: clean })
+    .eq("id", stageId)
+    .eq("workspace_id", current.workspace.id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+}
+
+/**
+ * 段階を1つ動かす。
+ * position に一意制約は無いので、隣と入れ替えるだけでよい。
+ */
+export async function moveStage(stageId: string, direction: "up" | "down") {
+  const current = await requireCurrent();
+  if (!current.member.is_admin) return { error: "管理者だけが変えられます。" };
+
+  const supabase = await createClient();
+  const { data: stages } = await supabase
+    .from("stages")
+    .select("id, position")
+    .eq("workspace_id", current.workspace.id)
+    .order("position", { ascending: true });
+
+  const list = stages ?? [];
+  const at = list.findIndex((s) => s.id === stageId);
+  if (at < 0) return { error: "その段階が見つかりません。" };
+
+  const to = direction === "up" ? at - 1 : at + 1;
+  if (to < 0 || to >= list.length) return;
+
+  // position に一意制約は無いので、途中で重なっても構わない。
+  // 2本の UPDATE で入れ替える。
+  const [me, neighbour] = [list[at], list[to]];
+  const swap = async (id: string, position: number) =>
+    supabase
+      .from("stages")
+      .update({ position })
+      .eq("id", id)
+      .eq("workspace_id", current.workspace.id);
+
+  const first = await swap(me.id, neighbour.position);
+  if (first.error) return { error: first.error.message };
+  const second = await swap(neighbour.id, me.position);
+  if (second.error) return { error: second.error.message };
+
+  revalidatePath("/settings");
+}
+
+export async function removeStage(stageId: string) {
+  const current = await requireCurrent();
+  if (!current.member.is_admin) return { error: "管理者だけが変えられます。" };
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("stages")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", current.workspace.id);
+  if ((count ?? 0) <= 1) return { error: "段階を全部なくすことはできません。" };
+
+  // 会社の stage_id は on delete set null なので、消しても会社は残る
+  const { error } = await supabase
+    .from("stages")
+    .delete()
+    .eq("id", stageId)
+    .eq("workspace_id", current.workspace.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  revalidatePath("/customers");
+}

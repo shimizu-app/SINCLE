@@ -26,11 +26,12 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
   const title = channel.kind === "company" ? company?.name ?? "会社" : channel.name ?? "グループ";
 
   const [{ data: rows }, { data: people }] = await Promise.all([
+    // 新しい方から200件。表示の直前に古い順へ戻す。
     supabase
       .from("messages")
       .select("id, text, created_at, author_id, is_system")
       .eq("channel_id", id)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(200),
     supabase
       .from("workspace_members")
@@ -42,7 +43,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
     (people ?? []).map((p) => [p.id, { name: p.name, avatar: p.avatar as unknown as Avatar }])
   );
 
-  const messages: StreamMessage[] = (rows ?? []).map((m) => ({
+  const messages: StreamMessage[] = (rows ?? []).reverse().map((m) => ({
     id: m.id,
     text: m.text,
     created_at: m.created_at,

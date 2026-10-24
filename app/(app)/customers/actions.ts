@@ -114,3 +114,19 @@ export async function setPrimaryContact(companyId: string, contactId: string) {
   if (error) return { error: error.message };
   revalidatePath(`/customers/${companyId}`);
 }
+
+/** 進捗のステージだけを変える（会社詳細のタスクタブ／SCREENS 4） */
+export async function setStage(companyId: string, stageId: string | null) {
+  const current = await requireCurrent();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("companies")
+    .update({ stage_id: stageId })
+    .eq("id", companyId)
+    .eq("workspace_id", current.workspace.id);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/customers/${companyId}`);
+  revalidatePath("/customers");
+}

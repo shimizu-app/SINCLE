@@ -30,11 +30,12 @@ export default async function DmPage({ params }: { params: Promise<{ id: string 
       .select("id, name, role, avatar")
       .eq("id", otherId)
       .maybeSingle(),
+    // 新しい方から200件。表示の直前に古い順へ戻す。
     supabase
       .from("dm_messages")
       .select("id, text, created_at, author_id")
       .eq("thread_id", id)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(200),
   ]);
 
@@ -45,7 +46,7 @@ export default async function DmPage({ params }: { params: Promise<{ id: string 
     peopleMap[other.id] = { name: other.name, avatar: other.avatar as unknown as Avatar };
   }
 
-  const messages: StreamMessage[] = (rows ?? []).map((m) => ({
+  const messages: StreamMessage[] = (rows ?? []).reverse().map((m) => ({
     id: m.id,
     text: m.text,
     created_at: m.created_at,

@@ -67,6 +67,13 @@ $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
   -f "$HERE/phase5.sql"
 
 echo ""
+echo "══ 会社で絞ったタスクと、ステージの編集権限 ══"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
+  -f "$HERE/tasks_stages.sql"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/tasks_stages_write.sql"
+
+echo ""
 echo "══ 他社から見えないことの確認 ══"
 $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
   -f "$HERE/isolation.sql"
