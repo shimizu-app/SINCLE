@@ -8,6 +8,7 @@ import { C, SOFT } from "@/lib/design";
 import { AuthShell } from "@/components/AuthShell";
 import { OrganicButton, ShapeIcon } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
+import { authErrorText, isOffline } from "@/lib/auth-errors";
 
 // Supabase の mailer_otp_length に合わせる。既定は 8 なので、
 // 合わせ忘れると「桁数が違って入力できない」になる。
@@ -59,9 +60,12 @@ export function CodeForm({ email, next }: { email: string; next: string }) {
 
     setBusy(false);
     if (error) {
-      setError("コードが違うか、期限が切れています。もう一度お試しください。");
-      setDigits(Array(LENGTH).fill(""));
-      boxes.current[0]?.focus();
+      setError(authErrorText(error));
+      // 繋がらなかっただけなら、打ち直させるのは酷なので消さない
+      if (!isOffline(error)) {
+        setDigits(Array(LENGTH).fill(""));
+        boxes.current[0]?.focus();
+      }
       return;
     }
     // 戻り先の指定がなければ、起動画面が行き先
@@ -80,11 +84,7 @@ export function CodeForm({ email, next }: { email: string; next: string }) {
       },
     });
     if (error) {
-      setError(
-        error.status === 429
-          ? "送信の回数制限に達しました。少し待ってからもう一度お試しください。"
-          : error.message
-      );
+      setError(authErrorText(error));
       return;
     }
     setResent(true);

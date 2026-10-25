@@ -246,14 +246,15 @@ npx supabase gen types typescript --project-id <project-ref> > types/supabase.ts
 
 `types/supabase.ts` は自動生成です。業務上のユニオン型は `types/db.ts` に手で置いています。
 
-### 名刺の振り分けの確認
+### 画面のロジックの確認
 
 ```bash
-npm run test:card
+npm test
 ```
 
-OCR の文字列を会社名・氏名・役職・部署・メール・電話・Web・住所に
-振り分けるところ（`lib/card.ts`）だけを確かめます。
+- `lib/card.ts` … OCR の文字列を会社名・氏名・役職・部署・メール・電話・Web・住所に振り分ける
+- `lib/auth-errors.ts` … Supabase の認証エラーを日本語の「次にどうするか」に言い換える
+
 ネットワークには出ません。依存も足していません
 （Node の `--experimental-strip-types` で TypeScript をそのまま読みます）。
 
@@ -291,6 +292,7 @@ lib/
   design.ts             色・形・分類・判定ロジック（仕様書から無改変）
   vision.ts             Google Cloud Vision（サーバー専用）
   card.ts               読み取った文字を各欄に振り分ける
+  auth-errors.ts        認証エラーの言い換え
   supabase/             クライアント（ブラウザ / サーバー / middleware）
   workspace.ts          いま開いているワークスペースの解決
 types/
@@ -298,7 +300,7 @@ types/
   db.ts                 手で定義するユニオン型
 supabase/migrations/    マイグレーション
 supabase/test/          手元の PostgreSQL で流す通し確認
-test/                   名刺の振り分けの確認（npm run test:card）
+test/                   画面のロジックの確認（npm test）
 ```
 
 ---

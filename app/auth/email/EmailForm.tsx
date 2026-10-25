@@ -8,6 +8,7 @@ import { C } from "@/lib/design";
 import { AuthShell } from "@/components/AuthShell";
 import { OrganicButton, ShapeIcon } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
+import { authErrorText } from "@/lib/auth-errors";
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_AUTH === "on";
 
@@ -36,11 +37,7 @@ export function EmailForm({ next }: { next: string }) {
 
     setBusy(false);
     if (error) {
-      setError(
-        error.status === 429
-          ? "送信の回数制限に達しました。少し待ってからもう一度お試しください。"
-          : error.message
-      );
+      setError(authErrorText(error));
       return;
     }
     router.push(
