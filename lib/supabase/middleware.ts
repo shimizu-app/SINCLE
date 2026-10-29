@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/types/supabase";
 import { SUPABASE_URL, SUPABASE_KEY, checkSupabaseEnv, supabaseEnvMessage } from "./env";
+import { isOutage } from "@/lib/auth-errors";
 
 /** 未ログインでも通す入口 */
 const PUBLIC_PREFIXES = [
@@ -58,7 +59,27 @@ export async function updateSession(request: NextRequest) {
   // Cookie の中身は改ざんできるが、getUser は必ずサーバーに問い合わせる。
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+
+  // 「ログインしていない」と「Supabase に繋がらない」を混ぜないこと。
+  // 混ぜると、繋がらないだけの人まで /auth へ飛ばしてしまい、
+  // ログインし直しても戻されるので「追い出された」ように見える。
+  if (isOutage(error)) {
+    return new NextResponse(
+      [
+        "SYNCLE: データの保管先（Supabase）に繋がりませんでした。",
+        "",
+        "しばらく待ってから開き直してください。",
+        "何度も続く場合は、Supabase のプロジェクトが",
+        "一時停止していないか確かめてください。",
+        "（無料プランは、しばらく使わないと自動で止まります）",
+        "",
+        `原因: ${error?.message ?? "不明"}`,
+      ].join("\n"),
+      { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } }
+    );
+  }
 
   if (!user && !isPublic(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone();

@@ -75,3 +75,22 @@ export function isOffline(error: SupabaseAuthError | null | undefined): boolean 
     error?.message ?? ""
   );
 }
+
+/**
+ * Supabase に問い合わせそのものが届かなかったか。
+ *
+ * 「ログインしていない」と「Supabase に繋がらない」は別物。
+ * 混ぜると、繋がらないだけの人を未ログイン扱いで追い出してしまう。
+ *
+ * 未ログインのときは 400（AuthSessionMissingError）。
+ * 届かなかったときは status が 0 か 5xx、または取り直せる種類のエラー。
+ */
+export function isOutage(error: (SupabaseAuthError & { name?: string }) | null | undefined): boolean {
+  if (!error) return false;
+  if (error.name === "AuthRetryableFetchError") return true;
+  if (error.status === 0) return true;
+  if (typeof error.status === "number" && error.status >= 500) return true;
+  return /fetch failed|load failed|failed to fetch|networkerror|econnrefused|enotfound|getaddrinfo/i.test(
+    error.message ?? ""
+  );
+}
