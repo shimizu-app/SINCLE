@@ -41,6 +41,9 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
   const stream = useRef<MediaStream | null>(null);
   const album = useRef<HTMLInputElement>(null);
   const batch = useRef<HTMLInputElement>(null);
+  // 画面内のファインダーが開けない端末では、こちらが本線になる。
+  // capture を付けると、OS のカメラがそのまま立ち上がる。
+  const nativeCam = useRef<HTMLInputElement>(null);
 
   /* ── 鍵が入っているか ── */
   useEffect(() => {
@@ -151,11 +154,21 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
     [send, stopCamera]
   );
 
+  /**
+   * 撮る。
+   *
+   * 画面内のファインダーが動いていればそこから切り出す。
+   * 動いていなければ端末のカメラを開く。
+   * ここを disabled にすると、押しても何も起きないボタンになってしまう。
+   */
   const shoot = useCallback(() => {
     const el = video.current;
-    if (!el || !el.videoWidth) return;
-    void readOne(toJpeg(el, el.videoWidth, el.videoHeight));
-  }, [readOne]);
+    if (el && el.videoWidth > 0 && !cameraError) {
+      void readOne(toJpeg(el, el.videoWidth, el.videoHeight));
+      return;
+    }
+    nativeCam.current?.click();
+  }, [cameraError, readOne]);
 
   const fromFiles = useCallback(
     async (files: FileList | null) => {
@@ -164,7 +177,15 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
 
       if (list.length === 1) {
         const dataUrl = await shrinkFile(list[0]);
-        if (dataUrl) void readOne(dataUrl);
+        if (!dataUrl) {
+          // 黙って何も起きないのがいちばん困る。理由を出す。
+          setProblem({
+            kind: "decode",
+            message: "この写真を読み込めませんでした。別の写真か、撮り直しでお試しください。",
+          });
+          return;
+        }
+        void readOne(dataUrl);
         return;
       }
 
@@ -327,12 +348,14 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
             style={{ opacity: cameraError ? 0 : 1 }}
           />
           {cameraError && (
-            <p
-              className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs font-bold"
-              style={{ color: "#fff" }}
-            >
-              {cameraError}
-            </p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+              <p className="text-xs font-bold" style={{ color: "#fff" }}>
+                {cameraError}
+              </p>
+              <p className="text-[11px] font-bold" style={{ color: "#C8C2B6" }}>
+                下の丸いボタンを押すと、端末のカメラが開きます。
+              </p>
+            </div>
           )}
         </div>
 
@@ -347,9 +370,8 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
           <button
             type="button"
             onClick={shoot}
-            disabled={Boolean(cameraError)}
             aria-label="名刺を撮る"
-            className="anim-iconpop disabled:opacity-30"
+            className="anim-iconpop"
           >
             <SyncleMark size={92} />
           </button>
@@ -387,6 +409,15 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
         type="file"
         accept="image/*"
         multiple
+        className="hidden"
+        onChange={(e) => void fromFiles(e.target.files)}
+      />
+      {/* capture を付けると、選ぶ画面を出さずに OS のカメラが開く */}
+      <input
+        ref={nativeCam}
+        type="file"
+        accept="image/*"
+        capture="environment"
         className="hidden"
         onChange={(e) => void fromFiles(e.target.files)}
       />
@@ -429,11 +460,41 @@ function toJpeg(source: CanvasImageSource, width: number, height: number): strin
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
+/**
+ * 写真を縮めて JPEG にする。
+ *
+ * createImageBitmap が無い／失敗する端末がある（古い Safari、HEIC など）。
+ * そこで止まると「押しても何も起きない」になるので、
+ * img 要素で読み直す道も用意しておく。
+ */
 async function shrinkFile(file: File): Promise<string | null> {
-  if (!file.type.startsWith("image/")) return null;
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) return null;
-  const out = toJpeg(bitmap, bitmap.width, bitmap.height);
-  bitmap.close();
-  return out;
+  if (file.type && !file.type.startsWith("image/")) return null;
+
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(file).catch(() => null);
+    if (bitmap) {
+      const out = toJpeg(bitmap, bitmap.width, bitmap.height);
+      bitmap.close();
+      return out;
+    }
+  }
+
+  return viaImgElement(file);
+}
+
+function viaImgElement(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const out = toJpeg(img, img.naturalWidth, img.naturalHeight);
+      URL.revokeObjectURL(url);
+      resolve(out);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
+  });
 }
