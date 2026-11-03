@@ -37,9 +37,36 @@ export type VisionResult =
 
 /* ── 鍵の読み出し ───────────────────────────────────────── */
 
-function readServiceAccount(): ServiceAccount | null {
+/**
+ * 鍵の読み出し。駄目だった理由まで返す。
+ *
+ * 「変数が無い」と「貼ったけれど中身が壊れている」を
+ * 同じ文言にしてはいけない。直し方がまったく違うのに、
+ * 画面を見ても区別がつかなくなる。
+ */
+type KeyRead =
+  | { ok: true; sa: ServiceAccount }
+  | { ok: false; reason: string };
+
+function readServiceAccount(): KeyRead {
   const raw = process.env.GOOGLE_VISION_SA_KEY?.trim();
-  if (!raw) return null;
+
+  if (raw === undefined) {
+    return {
+      ok: false,
+      reason:
+        "GOOGLE_VISION_SA_KEY が設定されていません。" +
+        "Vercel の Settings → Environment Variables に入れて、Redeploy してください。",
+    };
+  }
+  if (raw === "") {
+    return {
+      ok: false,
+      reason:
+        "GOOGLE_VISION_SA_KEY は登録されていますが、中身が空です。" +
+        "いったん削除してから入れ直してください。",
+    };
+  }
 
   const json = raw.startsWith("{") ? raw : Buffer.from(raw, "base64").toString("utf8");
 
@@ -47,23 +74,39 @@ function readServiceAccount(): ServiceAccount | null {
   try {
     parsed = JSON.parse(json);
   } catch {
-    return null;
+    return {
+      ok: false,
+      reason:
+        `GOOGLE_VISION_SA_KEY は入っていますが（${raw.length}文字）、中身が読めません。` +
+        "base64 の貼り付けが途中で切れていないか確かめてください。" +
+        "（base64 -w0／-i で1行にしてから貼ります）",
+    };
   }
 
   const sa = parsed as Partial<ServiceAccount>;
-  if (!sa.client_email || !sa.private_key) return null;
+  if (!sa.client_email || !sa.private_key) {
+    return {
+      ok: false,
+      reason:
+        "GOOGLE_VISION_SA_KEY の中身は読めましたが、client_email か private_key がありません。" +
+        "サービスアカウントの鍵（JSON）とは別のファイルを貼っている可能性があります。",
+    };
+  }
 
   return {
-    client_email: sa.client_email,
-    // 環境変数に貼るとき \n が文字列のまま入ることがある
-    private_key: sa.private_key.replace(/\\n/g, "\n"),
-    project_id: sa.project_id,
+    ok: true,
+    sa: {
+      client_email: sa.client_email,
+      // 環境変数に貼るとき \n が文字列のまま入ることがある
+      private_key: sa.private_key.replace(/\\n/g, "\n"),
+      project_id: sa.project_id,
+    },
   };
 }
 
 /** 鍵が使えるかだけを返す。画面の出し分けに使う。 */
 export function visionConfigured(): boolean {
-  return readServiceAccount() !== null;
+  return readServiceAccount().ok;
 }
 
 /* ── アクセストークン ───────────────────────────────────── */
@@ -123,21 +166,17 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
  * 名刺のような小さな紙では TEXT_DETECTION より素行がよい。
  */
 export async function readCard(imageBase64: string): Promise<VisionResult> {
-  const sa = readServiceAccount();
-  if (!sa) {
+  const key = readServiceAccount();
+  if (!key.ok) {
     return {
       ok: false,
-      failure: {
-        kind: "unconfigured",
-        message:
-          "名刺の読み取りの鍵（GOOGLE_VISION_SA_KEY）が入っていません。手入力で登録できます。",
-      },
+      failure: { kind: "unconfigured", message: `${key.reason}（いまは手入力で登録できます）` },
     };
   }
 
   let token: string;
   try {
-    token = await accessToken(sa);
+    token = await accessToken(key.sa);
   } catch (error) {
     return {
       ok: false,
