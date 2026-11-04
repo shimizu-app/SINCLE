@@ -7,12 +7,13 @@ import { SectionHead, ShapeIcon } from "@/components/ui";
 import { MemberAdmin, type JoinRequest, type MemberInfo } from "./MemberAdmin";
 import { StageAdmin, type StageRow } from "./StageAdmin";
 import { GoogleCalendarCard, type GoogleCardProps } from "./GoogleCalendarCard";
+import { GmailCard, type GmailCardProps, type MailContact } from "./GmailCard";
 import { googleLink, listCalendars } from "@/lib/google";
+import { gmailState } from "@/lib/gmail";
 import { signOut } from "@/app/auth/actions";
 
 /** まだ入っていない設定。入ったものはここから外す。 */
 const LATER: { shape: ShapeKey; color: ColorKey; title: string; desc: string; phase: string }[] = [
-  { shape: "square", color: "blue", title: "Gmail", desc: "取り込み範囲と、取り込む相手の一覧", phase: "フェーズ6" },
   { shape: "stamp", color: "red", title: "セキュリティ", desc: "Face ID でのロック", phase: "フェーズ4" },
 ];
 
@@ -76,6 +77,44 @@ export default async function SettingsPage({
         }
       : link;
 
+  // Gmail。連携は Google カレンダーと同じ行を使う
+  const [gmail, { data: mailContacts }] = await Promise.all([
+    gmailState(current.workspace.id, link),
+    supabase
+      .from("contacts")
+      .select("id, name, email, mail_watch, companies(name)")
+      .eq("workspace_id", current.workspace.id)
+      .is("archived_at", null)
+      .not("email", "is", null)
+      .order("name")
+      .limit(500),
+  ]);
+  // トークンは画面（ブラウザ）に渡さない。必要なものだけ取り出す
+  const gmailProps: GmailCardProps = {
+    state: gmail.state,
+    email: "email" in gmail ? gmail.email : null,
+    scope: gmail.state === "connected" ? gmail.scope : "registered",
+    lastSyncAt: gmail.state === "connected" ? gmail.lastSyncAt : null,
+    migration: gmail.state === "needs_migration" ? gmail.migration : undefined,
+    contacts: ((mailContacts ?? []) as unknown as {
+      id: string;
+      name: string;
+      email: string | null;
+      mail_watch: boolean;
+      companies: { name: string } | null;
+    }[])
+      .filter((c) => c.email)
+      .map(
+        (c): MailContact => ({
+          id: c.id,
+          name: c.name,
+          email: c.email as string,
+          company: c.companies?.name ?? null,
+          mail_watch: c.mail_watch,
+        })
+      ),
+  };
+
   // 招待リンクの見本に使う。ヘッダーから今のURLを組み立てる。
   const host = (await headers()).get("host") ?? "localhost:3000";
   const siteUrl = `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
@@ -134,6 +173,16 @@ export default async function SettingsPage({
             desc="あなたの予定を、タスクのカレンダーに並べます"
           />
           <GoogleCalendarCard {...google} notice={googleNotice(googleResult, detail)} />
+        </section>
+
+        <section id="gmail">
+          <SectionHead
+            shape="square"
+            color="blue"
+            title="Gmail"
+            desc="登録した相手とのメールを、会社ごとの履歴に取り込みます"
+          />
+          <GmailCard {...gmailProps} />
         </section>
 
         <section>

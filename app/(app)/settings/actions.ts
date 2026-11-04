@@ -241,3 +241,32 @@ export async function chooseGoogleCalendars(ids: string[]) {
   revalidatePath("/settings");
   revalidatePath("/tasks");
 }
+
+/* ── Gmail（SCREENS 11） ── */
+
+/** 取り込みの範囲（3段階）。自分の連携だけに効く */
+export async function setGmailScope(scope: string) {
+  const current = await requireCurrent();
+  if (!["registered", "domain", "all"].includes(scope)) return { error: "範囲が正しくありません。" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_gmail_scope", {
+    p_workspace_id: current.workspace.id,
+    p_scope: scope,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/mail");
+}
+
+/** 相手ごとに、取り込む／取り込まないを切り替える。だれの Gmail からの取り込みにも効く */
+export async function setMailWatch(contactId: string, on: boolean) {
+  const current = await requireCurrent();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("contacts")
+    .update({ mail_watch: on })
+    .eq("id", contactId)
+    .eq("workspace_id", current.workspace.id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+}

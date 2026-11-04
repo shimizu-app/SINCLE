@@ -17,6 +17,8 @@ import { CompanyTasks } from "./CompanyTasks";
 import { CompanyProgress } from "./CompanyProgress";
 import { MessageStream, type StreamMessage } from "../../channels/MessageStream";
 import type { Subtask, TaskRow } from "../../tasks/TaskList";
+import { MailList } from "../../mail/MailList";
+import { loadMails } from "../../mail/load";
 import type { Avatar, Tier } from "@/types/db";
 
 const TABS = [
@@ -25,7 +27,7 @@ const TABS = [
   { key: "timeline", label: "履歴", phase: null },
   { key: "documents", label: "書類", phase: null },
   { key: "tasks", label: "タスク", phase: null },
-  { key: "mail", label: "メール", phase: "フェーズ6" },
+  { key: "mail", label: "メール", phase: null },
   { key: "channel", label: "チャンネル", phase: null },
 ] as const;
 
@@ -147,6 +149,9 @@ export default async function CompanyPage({
         .in("task_id", taskIds)
         .order("position")
     : { data: [] };
+
+  // ── メールタブ ──
+  const mails = tab.key === "mail" ? await loadMails(current.workspace.id, { companyId: id, limit: 100 }) : [];
 
   // ── チャンネルタブ ──
   const [{ data: channel }, { data: people }] =
@@ -315,6 +320,38 @@ export default async function CompanyPage({
             members={membersRes.data ?? []}
             myMemberId={current.member.id}
           />
+        )}
+
+        {tab.key === "mail" && (
+          <>
+            <div className="flex items-center gap-2">
+              <p className="flex-1 text-[11px] font-bold leading-relaxed" style={{ color: "#9AA0A6" }}>
+                この会社の人とのやりとり。チームのメンバーが Gmail から取り込んだものです。
+              </p>
+              <Link
+                href="/mail"
+                className="text-xs font-bold px-3 py-2 shrink-0"
+                style={{
+                  color: C.blue,
+                  background: "#fff",
+                  border: `2px solid ${C.line}`,
+                  borderRadius: "14px 7px 14px 7px",
+                }}
+              >
+                新しいメールを取り込む
+              </Link>
+            </div>
+            {mails.length ? (
+              <MailList items={mails} showCompany={false} />
+            ) : (
+              <EmptyState
+                shape="square"
+                color="blue"
+                title="メールはまだありません"
+                desc={"Gmail をつなぐと、この会社の名刺の人との\nやりとりがここに並びます。"}
+              />
+            )}
+          </>
         )}
 
         {tab.key === "channel" && (

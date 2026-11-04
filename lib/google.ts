@@ -20,6 +20,7 @@ import { decryptWith, encryptWith, parseKey } from "./token-crypto";
  *
  * 権限は読み取りだけ（calendar.readonly）。SPEC 6章「権限スコープは必要最小限に」。
  * 予定を書き込む機能（タスクのカレンダー登録・日程調整）を入れるときに広げる。
+ * Gmail（gmail.readonly）は、Gmail をつなぐと決めた人にだけ追加で求める（lib/gmail.ts）。
  */
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -60,12 +61,20 @@ export function googleConfig(): { ok: true; config: Config } | { ok: false; miss
 
 /* ── 同意画面へ ─────────────────────────────────────────── */
 
-export function authorizeUrl(config: Config, redirectUri: string, state: string): string {
+/** Gmail の読み取り。メール画面・設定の「Gmail をつなぐ」から来たときだけ足す */
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
+export function authorizeUrl(
+  config: Config,
+  redirectUri: string,
+  state: string,
+  extraScopes: string[] = []
+): string {
   const q = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: GOOGLE_SCOPES.join(" "),
+    scope: [...GOOGLE_SCOPES, ...extraScopes].join(" "),
     // 1時間で切れるアクセストークンを取り直すための refresh_token をもらう
     access_type: "offline",
     // 2回目以降も refresh_token を返してもらうため、毎回同意を出す
@@ -93,7 +102,7 @@ export async function connectWithCode(
   workspaceId: string,
   code: string,
   redirectUri: string
-): Promise<{ ok: true; email: string | null } | { ok: false; message: string }> {
+): Promise<{ ok: true; email: string | null; scopes: string[] } | { ok: false; message: string }> {
   const cfg = googleConfig();
   if (!cfg.ok) return { ok: false, message: `設定が足りません：${cfg.missing.join("、")}` };
   const { config } = cfg;
@@ -117,6 +126,7 @@ export async function connectWithCode(
   // id_token は Google の token エンドポイントから TLS で直接受け取ったもの。
   // 中身（どのアカウントか）を読むだけなので、署名の検証はしない。
   const email = emailFromIdToken(body.id_token);
+  const scopes = (body.scope ?? "").split(" ").filter(Boolean);
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("save_integration", {
@@ -125,12 +135,12 @@ export async function connectWithCode(
     p_access_token: encryptWith(config.key, body.access_token),
     p_refresh_token: body.refresh_token ? encryptWith(config.key, body.refresh_token) : undefined,
     p_expires_at: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
-    p_scopes: (body.scope ?? "").split(" ").filter(Boolean),
+    p_scopes: scopes,
     p_account_email: email ?? undefined,
   });
   if (error) return { ok: false, message: error.message };
 
-  return { ok: true, email };
+  return { ok: true, email, scopes };
 }
 
 function emailFromIdToken(idToken: string | undefined): string | null {

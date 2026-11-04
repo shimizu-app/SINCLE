@@ -1,26 +1,32 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireCurrent } from "@/lib/workspace";
-import { CALLBACK_PATH, connectWithCode } from "@/lib/google";
+import { CALLBACK_PATH, GMAIL_READ_SCOPE, connectWithCode } from "@/lib/google";
 
 /**
  * Google の同意画面から戻ってくる所。
  * Google Cloud の OAuth クライアントに「承認済みのリダイレクトURI」として
  *   https://sincle.vercel.app/api/google/callback
  * を登録しておくこと。1文字でも違うと Google が redirect_uri_mismatch を返す。
+ *
+ * カレンダーから来た人は設定へ、Gmail から来た人はメール画面へ戻す。
  */
 export const runtime = "nodejs";
 
 const STATE_COOKIE = "syncle_google_state";
+const PURPOSE_COOKIE = "syncle_google_for";
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
+  const gmail = request.cookies.get(PURPOSE_COOKIE)?.value === "gmail";
+
   const back = (result: string, detail?: string) => {
-    const to = new URL("/settings", request.url);
+    const to = new URL(gmail ? "/mail" : "/settings", request.url);
     to.searchParams.set("google", result);
     if (detail) to.searchParams.set("detail", detail.slice(0, 200));
-    to.hash = "google";
+    if (!gmail) to.hash = "google";
     const res = NextResponse.redirect(to);
     res.cookies.delete({ name: STATE_COOKIE, path: "/api/google" });
+    res.cookies.delete({ name: PURPOSE_COOKIE, path: "/api/google" });
     return res;
   };
 
@@ -43,6 +49,13 @@ export async function GET(request: NextRequest) {
     console.error(`[google] 連携に失敗 ${result.message}`);
     return back("failed", result.message);
   }
-  console.log("[google] 連携した");
+
+  // 同意画面で Gmail のチェックを外された（Google は項目ごとに外せる）
+  if (gmail && !result.scopes.includes(GMAIL_READ_SCOPE)) {
+    console.log("[google] つないだが Gmail の許可は無し");
+    return back("no_gmail");
+  }
+
+  console.log(`[google] 連携した${gmail ? "（Gmail も）" : ""}`);
   return back("connected");
 }

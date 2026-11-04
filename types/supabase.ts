@@ -697,6 +697,7 @@ export type Database = {
           created_at: string
           expires_at: string | null
           gmail_scope: string
+          gmail_stats: Json | null
           id: string
           last_sync_at: string | null
           member_id: string
@@ -712,6 +713,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           gmail_scope?: string
+          gmail_stats?: Json | null
           id?: string
           last_sync_at?: string | null
           member_id: string
@@ -727,6 +729,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           gmail_scope?: string
+          gmail_stats?: Json | null
           id?: string
           last_sync_at?: string | null
           member_id?: string
@@ -925,9 +928,12 @@ export type Database = {
           gmail_message_id: string | null
           gmail_thread_id: string | null
           id: string
+          imported_by: string | null
           replied: boolean
+          rfc_message_id: string | null
           sent_at: string
           subject: string
+          task_id: string | null
           to_email: string | null
           workspace_id: string
         }
@@ -942,9 +948,12 @@ export type Database = {
           gmail_message_id?: string | null
           gmail_thread_id?: string | null
           id?: string
+          imported_by?: string | null
           replied?: boolean
+          rfc_message_id?: string | null
           sent_at: string
           subject: string
+          task_id?: string | null
           to_email?: string | null
           workspace_id: string
         }
@@ -959,9 +968,12 @@ export type Database = {
           gmail_message_id?: string | null
           gmail_thread_id?: string | null
           id?: string
+          imported_by?: string | null
           replied?: boolean
+          rfc_message_id?: string | null
           sent_at?: string
           subject?: string
+          task_id?: string | null
           to_email?: string | null
           workspace_id?: string
         }
@@ -978,6 +990,20 @@ export type Database = {
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mails_imported_by_fkey"
+            columns: ["imported_by"]
+            isOneToOne: false
+            referencedRelation: "workspace_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mails_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {
@@ -1560,6 +1586,7 @@ export type Database = {
           calendar_ids: Json
           expires_at: string
           gmail_scope: string
+          gmail_stats: Json | null
           last_sync_at: string
           provider: string
           scopes: string[]
@@ -1716,6 +1743,10 @@ export type Database = {
       my_channel_ids: { Args: never; Returns: string[] }
       my_dm_thread_ids: { Args: never; Returns: string[] }
       my_email: { Args: never; Returns: string }
+      mark_gmail_synced: {
+        Args: { p_stats: Json; p_workspace_id: string }
+        Returns: undefined
+      }
       my_integration: {
         Args: { p_provider: string; p_workspace_id: string }
         Returns: {
@@ -1818,6 +1849,10 @@ export type Database = {
           tier: string
           updated_at: string
         }[]
+      }
+      set_gmail_scope: {
+        Args: { p_scope: string; p_workspace_id: string }
+        Returns: undefined
       }
       set_integration_calendars: {
         Args: { p_calendar_ids: Json; p_provider: string; p_workspace_id: string }

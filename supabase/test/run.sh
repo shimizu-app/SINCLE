@@ -7,7 +7,7 @@
 # 必要なもの：postgresql-16（initdb / pg_ctl / psql）
 #
 # 確かめられること
-#   ・001〜018 が空のデータベースに順番どおり当たる
+#   ・001〜021 が空のデータベースに順番どおり当たる
 #   ・登録の連鎖・案件・履歴・書類・キーパーソンが期待どおり動く
 #   ・別のワークスペースからは1件も見えない（RLS）
 #
@@ -88,6 +88,13 @@ $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/calendar_roadmap.sql"
 $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/calendar_roadmap_write.sql"
+
+echo ""
+echo "══ Gmail の取り込み（021）══"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
+  -f "$HERE/gmail.sql"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/gmail_write.sql"
 
 echo ""
 echo "終わりました。データベースは消します。"
