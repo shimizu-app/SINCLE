@@ -20,6 +20,9 @@ test("回数制限", () => {
 
 test("メールを送れなかった", () => {
   assert.match(authErrorText({ message: "Error sending magic link email" }), /メールを送れませんでした/);
+  // 送り元は Gmail に替えた。Resend 向けの説明（独自ドメインの認証）は出さない
+  assert.doesNotMatch(authErrorText({ message: "Error sending magic link email" }), /独自ドメイン/);
+  assert.match(authErrorText({ message: "Error sending confirmation email" }), /SMTP/);
 });
 
 test("コードが違う", () => {

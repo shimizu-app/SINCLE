@@ -80,14 +80,16 @@ SUPABASE_ACCESS_TOKEN=sbp_xxx npm run setup:auth -- --site-url https://sincle.ve
 ```
 
 独自SMTP も一緒に設定できます（`SMTP_PASS` を渡したときだけ送ります）。
+既定は Gmail（`smtp.gmail.com` / 465）。`SMTP_PASS` は Google の**アプリパスワード**です。
 
 ```bash
-SUPABASE_ACCESS_TOKEN=sbp_xxx SMTP_PASS=re_xxx \
-  npm run setup:auth -- --site-url https://sincle.vercel.app
+SUPABASE_ACCESS_TOKEN=sbp_xxx SMTP_PASS='xxxx xxxx xxxx xxxx' \
+  npm run setup:auth -- --site-url https://sincle.vercel.app --smtp-user you@example.com
 ```
 
-既定は Resend（`smtp.resend.com` / 465 / user `resend`）。差出人は
-`--smtp-sender` で変えられます。SMTP を入れると送信上限も 1時間30通に上げます。
+差出人は `--smtp-user` と同じアドレスになります（Gmail が書き換えるため）。
+ほかの SMTP を使うときは `--smtp-host` `--smtp-port` `--smtp-sender` で変えられます。
+SMTP を入れると送信上限も 1時間30通に上げます。
 
 > ⚠️ **無料プランで既定のメール送信のままだと、メールの雛形を変更できません。**
 > Supabase が `Email template modification is not available for free tier projects
@@ -220,12 +222,36 @@ Google Cloud の OAuth クライアント（Web アプリケーション）で�
 切れたらタスクのカレンダーと設定に「つなぎ直してください」と出ます。
 ずっと使うなら、同意画面を「本番」に公開してください（カレンダーの権限は審査が要ります）。
 
-### 6. メール送信の上限に注意
+### 6. ログインのメールを Gmail から送る（必須）
 
-Supabase の既定のメール送信は**1時間あたり数通**に制限されています。
-検証でログインを繰り返すとすぐに詰まります。実際に使い始める前に
-独自SMTP（Resend など）へ切り替えてください。
-**Authentication → Emails → SMTP Settings** から設定します。
+Supabase の既定のメール送信は**1時間あたり数通**しか出せず、
+**プロジェクトのメンバー以外には届きません**。ほかの人を招いても、
+ログインのコードが届かず入れません。実際に使い始める前に、送り元を Gmail に替えます。
+
+1. 送るアカウント（例 `you@example.com`）で **2段階認証プロセス**を有効にする
+   （https://myaccount.google.com/signinoptions/two-step-verification ）
+2. **アプリパスワード**を作る（https://myaccount.google.com/apppasswords ）。
+   名前は `SYNCLE` など。16文字のパスワードが一度だけ表示されます
+   - 「この設定はご利用いただけません」と出たら、Google Workspace の管理者が
+     2段階認証を許可していないか、アプリパスワードを止めています
+3. Supabase の **Authentication → Emails → SMTP Settings** で
+   **Enable Custom SMTP** をオンにして、次を入れる
+
+| 項目 | 値 |
+|---|---|
+| Sender email | 送るアカウント（`you@example.com`） |
+| Sender name | `SYNCLE` |
+| Host | `smtp.gmail.com` |
+| Port number | `465` |
+| Username | 送るアカウント（`you@example.com`） |
+| Password | 2 のアプリパスワード（空白は抜いても入れてもよい） |
+
+4. 同じ画面の下にある **Rate Limits → Rate limit for sending emails** を 30 などに上げる
+
+アプリパスワードは、そのアカウントでメールを送れる鍵です。チャットなどに貼らないこと。
+使わなくなったら 2 の画面から消せます。
+
+Gmail の送信上限は Google Workspace で1日2,000通ほどなので、ログインのメールでは足ります。
 
 ### 7. 起動
 

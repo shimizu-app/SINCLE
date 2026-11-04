@@ -91,15 +91,26 @@ const mailConfig = {
 // 独自SMTP。SMTP_PASS が渡されたときだけ送る。
 // 無料プランは既定のメール送信のままだと雛形を変更できないため、
 // 6桁コードを出すにはここが要る。
+//
+// 既定は Gmail（Google Workspace）。SMTP_PASS はアプリパスワード（16文字）。
+// Gmail は差出人を、ログインしたアカウントに書き換える。
+// なので差出人は --smtp-user と同じアドレスにしておく。
 const smtpPass = process.env.SMTP_PASS;
+const smtpUser = args["smtp-user"];
+if (smtpPass && !smtpUser && !args["smtp-host"]) {
+  fail(
+    "Gmail から送るには、送るアカウントを --smtp-user で渡してください。\n" +
+      "  SMTP_PASS=アプリパスワード npm run setup:auth -- --smtp-user you@example.com"
+  );
+}
 const smtpConfig = smtpPass
   ? {
-      smtp_host: args["smtp-host"] ?? "smtp.resend.com",
+      smtp_host: args["smtp-host"] ?? "smtp.gmail.com",
       smtp_port: args["smtp-port"] ?? "465", // Supabase は文字列で受ける
-      smtp_user: args["smtp-user"] ?? "resend",
-      smtp_pass: smtpPass,
+      smtp_user: smtpUser,
+      smtp_pass: smtpPass.replace(/\s+/g, ""), // アプリパスワードは4文字ずつ空白入りで表示される
       smtp_sender_name: args["smtp-name"] ?? "SYNCLE",
-      smtp_admin_email: args["smtp-sender"] ?? "onboarding@resend.dev",
+      smtp_admin_email: args["smtp-sender"] ?? smtpUser,
       // 既定の送信は 1時間に2通しかない。独自SMTP なら絞る理由がない。
       // ここは数値で渡さないと 400 になる。
       rate_limit_email_sent: Number(args["rate-limit"] ?? 30),
@@ -206,7 +217,7 @@ if (mailSkipped) {
   console.log(`  ${mailSkipped}`);
   console.log("");
   console.log("無料プランで既定のメール送信を使っている間は雛形を変えられません。");
-  console.log("6桁コードを出すには、独自SMTP（Resend など）を設定してから");
+  console.log("6桁コードを出すには、独自SMTP（Gmail など）を設定してから");
   console.log("もう一度このコマンドを流してください。");
   console.log("それまではメール内のリンクからログインできます。");
 } else {
