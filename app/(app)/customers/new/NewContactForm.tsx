@@ -87,7 +87,12 @@ export function NewContactForm({
   const canNext = Boolean((linkTo ? linkTo.name : companyName).trim());
 
   return (
-    <form action={action}>
+    // noValidate：ブラウザの検査を切る。
+    // 2ステップに分けていて、1ステップ目の欄は隠れたまま送信される。
+    // 隠れた欄（メールの形・従業員数）が検査に引っかかると、
+    // ブラウザは知らせる場所が無いので、何も言わずに送信を止めてしまう。
+    // 必須は会社名だけで、それは「次へ」とサーバーの両方で見ている。
+    <form action={action} noValidate>
       <ScreenHeader
         title={step === 1 ? "名刺を登録" : "案件のこと"}
         subtitle={

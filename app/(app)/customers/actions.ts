@@ -33,7 +33,8 @@ export async function registerContact(
     p_contact_name: text("contactName"),
     p_dept: text("dept"),
     p_title: text("title"),
-    p_email: text("email"),
+    // 読み取りで空白が混ざることがある。メールに空白は入らないので落とす
+    p_email: text("email")?.replace(/\s+/g, "") || undefined,
     p_phone: text("phone"),
     p_industry: text("industry"),
     p_employees: Number.isFinite(employees) && employees > 0 ? employees : undefined,
