@@ -78,8 +78,8 @@ function readServiceAccount(): KeyRead {
       ok: false,
       reason:
         `GOOGLE_VISION_SA_KEY は入っていますが（${raw.length}文字）、中身が読めません。` +
-        "base64 の貼り付けが途中で切れていないか確かめてください。" +
-        "（base64 -w0／-i で1行にしてから貼ります）",
+        `${shapeOf(raw)}サービスアカウントのJSONは2,300文字くらいあります。` +
+        "ファイルの中身を丸ごと貼り直してください（cat ファイル名 | pbcopy が確実です）。",
     };
   }
 
@@ -102,6 +102,28 @@ function readServiceAccount(): KeyRead {
       project_id: sa.project_id,
     },
   };
+}
+
+/**
+ * 入っているものが何に見えるかを一言で返す。
+ *
+ * 値そのものは出さない。画面に出す文字列なので、
+ * 秘密鍵の断片が混ざってはいけない。
+ * 「形」だけを伝えて、貼り間違いの種類を切り分ける。
+ */
+function shapeOf(raw: string): string {
+  if (raw.includes("BEGIN PRIVATE KEY")) {
+    return "秘密鍵の部分だけが入っているようです。JSON全体が必要です。";
+  }
+  if (raw.startsWith("{")) {
+    return raw.trimEnd().endsWith("}")
+      ? "JSON の形には見えますが、途中が壊れているようです。"
+      : "JSON の途中で切れています（最後の } がありません）。";
+  }
+  if (/^[A-Za-z0-9+/=\s]+$/.test(raw)) {
+    return "base64 のようですが、戻してもJSONになりません。途中で切れている可能性があります。";
+  }
+  return "JSON でも base64 でもないものが入っているようです。";
 }
 
 /** 鍵が使えるかだけを返す。画面の出し分けに使う。 */
