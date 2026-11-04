@@ -35,12 +35,30 @@ export async function saveTask(_prev: ActionResult, form: FormData): Promise<Act
 
   const due = dueFrom(str(form, "dueDate"), str(form, "dueTime"));
   const id = str(form, "id");
+  const companyId = str(form, "companyId");
+  const assigneeId = str(form, "assigneeId") ?? current.member.id;
+
+  // 会社を選ばず、自分が担当なら「自分だけのTODO」にする。
+  // tasks はワークスペースの全員から見えるが、personal_todos は本人にしか見えない。
+  // 「歯医者」のような私用の予定まで、チームに見せないようにするため。
+  if (!id && !companyId && assigneeId === current.member.id) {
+    const { error } = await supabase.from("personal_todos").insert({
+      workspace_id: current.workspace.id,
+      member_id: current.member.id,
+      title,
+      priority: (str(form, "priority") ?? "中") as Priority,
+      ...due,
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/tasks");
+    return { ok: true };
+  }
 
   const row = {
     workspace_id: current.workspace.id,
     title,
-    company_id: str(form, "companyId"),
-    assignee_id: str(form, "assigneeId") ?? current.member.id,
+    company_id: companyId,
+    assignee_id: assigneeId,
     contact_id: str(form, "contactId"),
     priority: (str(form, "priority") ?? "中") as Priority,
     share: (str(form, "share") ?? "assignee") as TaskShare,
@@ -102,27 +120,6 @@ export async function deleteSubtask(id: string) {
 }
 
 /* ══════════════ 個人TODO ══════════════ */
-
-export async function saveTodo(_prev: ActionResult, form: FormData): Promise<ActionResult> {
-  const current = await requireCurrent();
-  const supabase = await createClient();
-
-  const title = str(form, "title");
-  if (!title) return { error: "内容を入力してください。" };
-
-  const due = dueFrom(str(form, "dueDate"), str(form, "dueTime"));
-  const { error } = await supabase.from("personal_todos").insert({
-    workspace_id: current.workspace.id,
-    member_id: current.member.id,
-    title,
-    priority: (str(form, "priority") ?? "中") as Priority,
-    ...due,
-  });
-
-  if (error) return { error: error.message };
-  revalidatePath("/tasks");
-  return { ok: true };
-}
 
 export async function toggleTodo(id: string, done: boolean) {
   await requireCurrent();

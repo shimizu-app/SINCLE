@@ -62,11 +62,13 @@ export function TaskList({
   tasks,
   todos,
   subtasks,
+  myMemberId,
   onAdd,
 }: {
   tasks: TaskRow[];
   todos: TodoRow[];
   subtasks: Subtask[];
+  myMemberId: string;
   onAdd: () => void;
 }) {
   // 会社ごとにまとめる（SCREENS 7-1）
@@ -79,15 +81,42 @@ export function TaskList({
     groups.get(key)!.rows.push(t);
   }
 
+  // 自分がやることを全部ここに集める。予定の確認ではなく「やることの一覧」として使う。
+  // 会社のタスクは下の「会社のタスク」にも並ぶ（あちらはチーム全体の一覧）。
+  const mine: ({ kind: "todo"; due: string | null; row: TodoRow } | { kind: "task"; due: string | null; row: TaskRow })[] = [
+    ...todos.map((row) => ({ kind: "todo" as const, due: row.due_at, row })),
+    ...tasks
+      .filter((t) => t.assignee_id === myMemberId)
+      .map((row) => ({ kind: "task" as const, due: row.due_at, row })),
+  ].sort((a, b) => {
+    // 期限の近い順。期限なしは後ろ
+    if (!a.due && !b.due) return 0;
+    if (!a.due) return 1;
+    if (!b.due) return -1;
+    return a.due.localeCompare(b.due);
+  });
+
   return (
     <div className="space-y-5">
       {/* ── 自分のTODO ── */}
       <section className="space-y-2">
-        <Head shape="drop" color="blue" title="自分のTODO" count={todos.length} />
-        {todos.length === 0 ? (
-          <Muted>いまは空です。</Muted>
+        <Head shape="drop" color="blue" title="自分のTODO" count={mine.length} />
+        {mine.length === 0 ? (
+          <Muted>自分がやることは、いまはありません。</Muted>
         ) : (
-          todos.map((todo, i) => <TodoCard key={todo.id} todo={todo} index={i} />)
+          mine.map((item, i) =>
+            item.kind === "todo" ? (
+              <TodoCard key={`todo-${item.row.id}`} todo={item.row} index={i} />
+            ) : (
+              <TaskCard
+                key={`task-${item.row.id}`}
+                task={item.row}
+                index={i}
+                subtasks={subtasks.filter((s) => s.task_id === item.row.id)}
+                showCompany
+              />
+            )
+          )
         )}
       </section>
 
@@ -132,13 +161,24 @@ export function TaskList({
 
       <OrganicButton type="button" size="lg" color="yellow" className="w-full" onClick={onAdd}>
         <Plus size={16} strokeWidth={3} />
-        タスクを追加
+        TODO・タスクを追加
       </OrganicButton>
     </div>
   );
 }
 
-export function TaskCard({ task, index, subtasks }: { task: TaskRow; index: number; subtasks: Subtask[] }) {
+export function TaskCard({
+  task,
+  index,
+  subtasks,
+  showCompany = false,
+}: {
+  task: TaskRow;
+  index: number;
+  subtasks: Subtask[];
+  /** 会社ごとにまとめていない場所（自分のTODO）では、どの会社のことかを出す */
+  showCompany?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
@@ -201,6 +241,9 @@ export function TaskCard({ task, index, subtasks }: { task: TaskRow; index: numb
             {task.title}
           </div>
           <div className="flex items-center gap-2 mt-1.5 text-[11px] font-bold flex-wrap" style={{ color: "#6B6B6B" }}>
+            {showCompany && task.company_name && (
+              <span style={{ color: C.purple }}>{task.company_name}</span>
+            )}
             {due && <span style={{ color: late ? C.red : undefined }}>{late ? "期限切れ " : ""}{due}</span>}
             {task.contact_name && <span>{task.contact_name}</span>}
             {list.length > 0 && (

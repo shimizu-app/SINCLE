@@ -72,6 +72,8 @@ $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
   -f "$HERE/tasks_stages.sql"
 $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/tasks_stages_write.sql"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/todos_private.sql"
 
 echo ""
 echo "══ 他社から見えないことの確認 ══"

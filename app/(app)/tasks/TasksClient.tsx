@@ -24,7 +24,13 @@ export function TasksClient({
 
   return (
     <>
-      <TaskList tasks={tasks} todos={todos} subtasks={subtasks} onAdd={() => setOpen(true)} />
+      <TaskList
+        tasks={tasks}
+        todos={todos}
+        subtasks={subtasks}
+        myMemberId={myMemberId}
+        onAdd={() => setOpen(true)}
+      />
       <TaskSheet
         open={open}
         onClose={() => setOpen(false)}

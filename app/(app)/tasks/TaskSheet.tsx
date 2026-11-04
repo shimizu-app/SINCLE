@@ -35,6 +35,11 @@ export function TaskSheet({
   const [priority, setPriority] = useState<Priority>("中");
   const [share, setShare] = useState<TaskShare>("assignee");
   const [time, setTime] = useState<string>("");
+  const [companyId, setCompanyId] = useState<string>(defaultCompanyId ?? "");
+  const [assigneeId, setAssigneeId] = useState<string>(myMemberId);
+
+  // 会社なしで自分が担当なら、自分だけのTODOになる（actions.ts の saveTask と同じ決め方）
+  const personal = !companyId && assigneeId === myMemberId;
 
   // 保存できたら閉じる
   useEffect(() => {
@@ -42,7 +47,12 @@ export function TaskSheet({
   }, [state, onClose]);
 
   return (
-    <Sheet open={open} onClose={onClose} title="タスクを追加" subtitle="担当と期限を決めます">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={personal ? "TODOを追加" : "タスクを追加"}
+      subtitle={personal ? "自分がやること" : "担当と期限を決めます"}
+    >
       <form action={action} className="space-y-3">
         <input type="hidden" name="priority" value={priority} />
         <input type="hidden" name="share" value={share} />
@@ -60,7 +70,8 @@ export function TaskSheet({
         <div className="grid grid-cols-2 gap-2">
           <select
             name="companyId"
-            defaultValue={defaultCompanyId ?? ""}
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
             className="w-full px-3 py-3 text-sm bg-white outline-none"
             style={field}
           >
@@ -73,7 +84,8 @@ export function TaskSheet({
           </select>
           <select
             name="assigneeId"
-            defaultValue={myMemberId}
+            value={assigneeId}
+            onChange={(e) => setAssigneeId(e.target.value)}
             className="w-full px-3 py-3 text-sm bg-white outline-none"
             style={{ ...field, borderRadius: "11px 22px 11px 22px" }}
           >
@@ -84,6 +96,19 @@ export function TaskSheet({
             ))}
           </select>
         </div>
+
+        <p
+          className="text-[11px] font-bold px-3 py-2"
+          style={{
+            background: personal ? SOFT.blue : SOFT.yellow,
+            color: personal ? C.blue : "#9A6B00",
+            borderRadius: "12px 6px 12px 6px",
+          }}
+        >
+          {personal
+            ? "自分だけのTODOになります。ほかの人には見えません。会社を選ぶと会社のタスクになります。"
+            : "会社のタスクになります。チームの全員に見え、担当者の「自分のTODO」にも並びます。"}
+        </p>
 
         <div className="space-y-2">
           <Label>期限</Label>
@@ -129,7 +154,7 @@ export function TaskSheet({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className={personal ? "hidden" : "space-y-2"}>
           <Label>カレンダーの共有先</Label>
           {SHARES.map((key) => {
             const s = TASK_SHARE[key];
