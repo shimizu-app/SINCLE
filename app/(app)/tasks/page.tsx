@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TasksClient } from "./TasksClient";
 import { TaskCalendar, type CalendarItem } from "./TaskCalendar";
+import { googleLink, listEvents } from "@/lib/google";
 import { Memos, type MemoRow } from "./Memos";
 import type { Subtask, TaskRow, TodoRow } from "./TaskList";
 
@@ -71,6 +72,35 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   const tasks = (tasksRes.data ?? []) as unknown as TaskRow[];
 
+  // ── Google カレンダーの予定 ──
+  // 本人がつないだ予定は本人にだけ出す。「チーム共有」には混ぜない
+  //（あれはチームに向けた予定の一覧で、個人の予定を見せる場所ではない）。
+  let googleItems: CalendarItem[] = [];
+  let googleState: "connected" | "expired" | "none" = "none";
+  if (tab === "calendar" && scope !== "team") {
+    const link = await googleLink(ws);
+    if (link.state === "connected") {
+      googleState = "connected";
+      // 月の前後1日まで取る（時差で月の境目の予定が落ちないように）
+      const start = new Date(year, month - 1, 0);
+      const end = new Date(year, month, 1);
+      const events = await listEvents(link.token, link.calendarIds, start, end);
+      googleItems = events.map((e) => ({
+        kind: "gcal",
+        id: e.id,
+        title: e.title,
+        at: e.at,
+        has_time: !e.allDay,
+        done: null,
+        priority: null,
+        share: null,
+        company_name: null,
+      }));
+    } else if (link.state === "expired") {
+      googleState = "expired";
+    }
+  }
+
   // 開いたときだけ引くのは往復が増えるので、一覧ぶんまとめて取る
   const taskIds = tasks.map((t) => t.id);
   const { data: subtaskRows } = taskIds.length
@@ -125,7 +155,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
         {tab === "calendar" && (
           <TaskCalendar
-            items={(calendarRes.data ?? []) as unknown as CalendarItem[]}
+            items={[...((calendarRes.data ?? []) as unknown as CalendarItem[]), ...googleItems]}
+            google={googleState}
             year={year}
             month={month}
             scope={scope}

@@ -81,4 +81,11 @@ $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/isolation_write.sql"
 
 echo ""
+echo "══ Google 連携のトークンと計画（020）══"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/calendar_roadmap.sql"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/calendar_roadmap_write.sql"
+
+echo ""
 echo "終わりました。データベースは消します。"

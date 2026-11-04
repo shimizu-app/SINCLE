@@ -36,7 +36,9 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 | 会社詳細の7タブ（概要・名刺・履歴・書類・タスク・チャンネル） | ○ メールだけフェーズ6 |
 | 商談の段階（ステージ）の編集 | ○ 設定から。変えられるのは管理者だけ |
 | 名刺スキャン（カメラ・OCR・まとめ読み） | ○ 鍵を入れると動く（下記） |
-| Google連携・日程調整・AIメール | フェーズ6（Google OAuth の申請待ち） |
+| 計画（議題・決まったこと・やること・ロードマップ図） | ○ |
+| Google カレンダー連携（つなぐ・使うカレンダーを選ぶ・タスクのカレンダーに予定を出す） | ○ Google 側の設定が要る（下記） |
+| 日程調整・予約ページ・Gmail・AIメール | フェーズ6の残り |
 
 フェーズ2以降の順番は `SPEC.md` 9章のとおりです。
 
@@ -188,14 +190,44 @@ Vision は文字の読み取りが月1,000枚まで無料ですが、
 ライブラリは足していません。`node:crypto` で JWT に署名して
 アクセストークンに交換しています（`lib/vision.ts`）。
 
-### 5. メール送信の上限に注意
+### 5. Google カレンダー連携（任意・フェーズ6）
+
+**入れなくてもアプリは動きます**（設定の「Google カレンダー」に、何が足りないかが出るだけ）。
+
+Google Cloud の OAuth クライアント（Web アプリケーション）で：
+
+1. **承認済みのリダイレクトURI** に次を足す（1文字でも違うと `redirect_uri_mismatch`）
+   ```
+   https://sincle.vercel.app/api/google/callback
+   http://localhost:3000/api/google/callback
+   ```
+2. **クライアントシークレット**を `GOOGLE_OAUTH_CLIENT_SECRET` に入れる（Vercel にも）
+3. OAuth 同意画面が「テスト中」なら、**テストユーザー**につなぐ Google アカウントを足す
+
+| 環境変数 | |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_SECRET` | 必須 |
+| `GOOGLE_OAUTH_CLIENT_ID` | 任意。無ければ ORINAMI の Web client を使う（秘密ではない値） |
+| `TOKEN_ENCRYPTION_KEY` | 任意。トークンを暗号化する鍵（32バイトを base64）。無ければシークレットから作る |
+
+権限は**読み取りだけ**（`calendar.readonly`）です。Google 側の予定を書き換えることはありません。
+
+**つないだ予定は本人にだけ見えます。** トークンは暗号化して保存し、
+本人だけが読める関数からしか出し入れできません（`020`、`lib/token-crypto.ts`）。
+タスクのカレンダーの「チーム共有」には混ぜません。
+
+**同意画面が「テスト中」のままだと、7日ごとに連携が切れます**（Google の決まり）。
+切れたらタスクのカレンダーと設定に「つなぎ直してください」と出ます。
+ずっと使うなら、同意画面を「本番」に公開してください（カレンダーの権限は審査が要ります）。
+
+### 6. メール送信の上限に注意
 
 Supabase の既定のメール送信は**1時間あたり数通**に制限されています。
 検証でログインを繰り返すとすぐに詰まります。実際に使い始める前に
 独自SMTP（Resend など）へ切り替えてください。
 **Authentication → Emails → SMTP Settings** から設定します。
 
-### 6. 起動
+### 7. 起動
 
 ```bash
 npm run dev
@@ -228,6 +260,7 @@ npm run dev
 | `017_tasks_channels.sql` | タスク・カレンダー・チャンネル・DM・メンバー招待の RPC |
 | `018_deals_timeline.sql` | 進行中の案件・活動タイムライン・キーパーソンの RPC |
 | `019_company_tasks_stages.sql` | `list_tasks` に会社の絞り込み／ステージの書き換えを管理者だけに |
+| `020_calendar_roadmap.sql` | Google 連携トークンの出し入れ（本人だけ）／計画の議題にチャンネル |
 
 **RLS は各テーブルの作成直後に有効化しています**（SPEC 0章）。
 
@@ -266,6 +299,8 @@ npm test
 
 - `lib/card.ts` … OCR の文字列を会社名・氏名・役職・部署・メール・電話・Web・住所に振り分ける
 - `lib/auth-errors.ts` … Supabase の認証エラーを日本語の「次にどうするか」に言い換える
+- `lib/pem.ts` … 貼る途中で崩れた秘密鍵の改行を組み直す
+- `lib/token-crypto.ts` … 連携トークンの暗号化（開けない鍵・書き換えを弾く）
 
 ネットワークには出ません。依存も足していません
 （Node の `--experimental-strip-types` で TypeScript をそのまま読みます）。
@@ -277,7 +312,7 @@ npm run db:test
 ```
 
 手元の PostgreSQL に使い捨てのデータベースを作り、`001`〜`018` を順に当てて、
-登録の連鎖・案件・履歴・書類・キーパーソンを実際に動かします。
+登録の連鎖・案件・履歴・書類・キーパーソン・計画・連携トークンの出し入れを実際に動かします。
 続けて**別のワークスペースから1件も見えないこと**（RLS）も確かめます。
 終わったらデータベースは消します。本番のプロジェクトには一切繋ぎません。
 
@@ -305,6 +340,8 @@ lib/
   vision.ts             Google Cloud Vision（サーバー専用）
   card.ts               読み取った文字を各欄に振り分ける
   auth-errors.ts        認証エラーの言い換え
+  google.ts             Google カレンダー連携（サーバー専用）
+  token-crypto.ts       連携トークンの暗号化
   supabase/             クライアント（ブラウザ / サーバー / middleware）
   workspace.ts          いま開いているワークスペースの解決
 types/

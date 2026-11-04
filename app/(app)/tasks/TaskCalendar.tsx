@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { ShapeIcon } from "@/components/ui";
 
 export type CalendarItem = {
-  kind: "event" | "task" | "todo";
+  /** gcal：Google カレンダーの予定（本人にだけ出す） */
+  kind: "event" | "task" | "todo" | "gcal";
   id: string;
   title: string;
   at: string;
@@ -28,7 +30,7 @@ const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
 /** SCREENS 7-2 の点の色 */
 function dotColor(item: CalendarItem) {
-  if (item.kind === "event") return C.green;
+  if (item.kind === "event" || item.kind === "gcal") return C.green;
   if (item.done) return "#C8C2B6";
   if (item.priority === "高") return C.red;
   if (item.priority === "中") return C.blue;
@@ -43,11 +45,14 @@ export function TaskCalendar({
   year,
   month,
   scope,
+  google = "none",
 }: {
   items: CalendarItem[];
   year: number;
   month: number; // 1-12
   scope: string;
+  /** Google カレンダーをつないでいるか。切れていれば知らせる */
+  google?: "connected" | "expired" | "none";
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -92,6 +97,15 @@ export function TaskCalendar({
 
   return (
     <div className="space-y-3">
+      {google === "expired" && (
+        <Link
+          href="/settings#google"
+          className="block px-3.5 py-2.5 text-xs font-bold"
+          style={{ background: SOFT.orange, color: "#8A4B00", borderRadius: "14px 7px 14px 7px" }}
+        >
+          Google カレンダーとの連携が切れています。設定からつなぎ直してください →
+        </Link>
+      )}
       <div className="flex gap-1.5">
         {SCOPES.map(([key, label]) => {
           const on = scope === key;
@@ -215,8 +229,8 @@ export function TaskCalendar({
                   {time}
                 </span>
                 <ShapeIcon
-                  shape={item.kind === "event" ? "drop" : item.kind === "todo" ? "blob" : "sun"}
-                  color={item.kind === "event" ? "green" : item.kind === "todo" ? "blue" : "yellow"}
+                  shape={item.kind === "gcal" ? "arch" : item.kind === "event" ? "drop" : item.kind === "todo" ? "blob" : "sun"}
+                  color={item.kind === "event" || item.kind === "gcal" ? "green" : item.kind === "todo" ? "blue" : "yellow"}
                   size={22}
                 />
                 <div className="flex-1 min-w-0">
@@ -229,6 +243,11 @@ export function TaskCalendar({
                   {item.company_name && (
                     <div className="text-[11px] font-bold" style={{ color: "#9AA0A6" }}>
                       {item.company_name}
+                    </div>
+                  )}
+                  {item.kind === "gcal" && (
+                    <div className="text-[11px] font-bold" style={{ color: "#9AA0A6" }}>
+                      Google カレンダー
                     </div>
                   )}
                 </div>

@@ -6,17 +6,47 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHead, ShapeIcon } from "@/components/ui";
 import { MemberAdmin, type JoinRequest, type MemberInfo } from "./MemberAdmin";
 import { StageAdmin, type StageRow } from "./StageAdmin";
+import { GoogleCalendarCard, type GoogleCardProps } from "./GoogleCalendarCard";
+import { googleLink, listCalendars } from "@/lib/google";
 import { signOut } from "@/app/auth/actions";
 
 /** まだ入っていない設定。入ったものはここから外す。 */
 const LATER: { shape: ShapeKey; color: ColorKey; title: string; desc: string; phase: string }[] = [
-  { shape: "arch", color: "green", title: "Google カレンダー", desc: "連携と、チーム共有の仕組み", phase: "フェーズ6" },
   { shape: "square", color: "blue", title: "Gmail", desc: "取り込み範囲と、取り込む相手の一覧", phase: "フェーズ6" },
   { shape: "stamp", color: "red", title: "セキュリティ", desc: "Face ID でのロック", phase: "フェーズ4" },
 ];
 
-export default async function SettingsPage() {
+/** Google から戻ってきたときの一言（?google=…） */
+function googleNotice(result?: string, detail?: string): { tone: "ok" | "ng"; text: string } | undefined {
+  switch (result) {
+    case "connected":
+      return { tone: "ok", text: "Google カレンダーをつなぎました。タスクのカレンダーに予定が並びます。" };
+    case "denied":
+      return {
+        tone: "ng",
+        text:
+          detail === "access_denied"
+            ? "Google 側で許可されませんでした。同意画面が「テスト中」の間は、テストユーザーに登録した Google アカウントでしかつなげません。"
+            : `Google 側で止められました（${detail ?? "理由不明"}）。`,
+      };
+    case "state":
+      return { tone: "ng", text: "途中で別の画面に移ったため、つなげませんでした。もう一度お試しください。" };
+    case "unconfigured":
+      return { tone: "ng", text: "Google 連携の設定（環境変数）が足りません。" };
+    case "failed":
+      return { tone: "ng", text: `つなげませんでした。${detail ?? ""}` };
+    default:
+      return undefined;
+  }
+}
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string; detail?: string }>;
+}) {
   const current = await requireCurrent();
+  const { google: googleResult, detail } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: members }, { data: requests }] = await Promise.all([
@@ -33,6 +63,18 @@ export default async function SettingsPage() {
     .select("id, name, position")
     .eq("workspace_id", current.workspace.id)
     .order("position", { ascending: true });
+
+  // Google カレンダー。つながっていれば、選べるカレンダーの一覧も取る
+  const link = await googleLink(current.workspace.id);
+  const google: GoogleCardProps =
+    link.state === "connected"
+      ? {
+          state: "connected",
+          email: link.email,
+          selected: link.calendarIds,
+          calendars: await listCalendars(link.token),
+        }
+      : link;
 
   // 招待リンクの見本に使う。ヘッダーから今のURLを組み立てる。
   const host = (await headers()).get("host") ?? "localhost:3000";
@@ -82,6 +124,16 @@ export default async function SettingsPage() {
         <section>
           <SectionHead shape="wave" color="blue" title="商談の進み具合" desc="いまの流れ。段階の名前と並びを変えられます" />
           <StageAdmin stages={(stages ?? []) as StageRow[]} isAdmin={current.member.is_admin} />
+        </section>
+
+        <section id="google">
+          <SectionHead
+            shape="arch"
+            color="green"
+            title="Google カレンダー"
+            desc="あなたの予定を、タスクのカレンダーに並べます"
+          />
+          <GoogleCalendarCard {...google} notice={googleNotice(googleResult, detail)} />
         </section>
 
         <section>

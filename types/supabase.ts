@@ -62,6 +62,7 @@ export type Database = {
       }
       agenda_items: {
         Row: {
+          channel_id: string | null
           created_at: string
           decided_at: string | null
           decision: string | null
@@ -76,6 +77,7 @@ export type Database = {
           year: number
         }
         Insert: {
+          channel_id?: string | null
           created_at?: string
           decided_at?: string | null
           decision?: string | null
@@ -90,6 +92,7 @@ export type Database = {
           year: number
         }
         Update: {
+          channel_id?: string | null
           created_at?: string
           decided_at?: string | null
           decision?: string | null
@@ -689,6 +692,7 @@ export type Database = {
       integrations: {
         Row: {
           access_token: string
+          account_email: string | null
           calendar_ids: Json
           created_at: string
           expires_at: string | null
@@ -703,6 +707,7 @@ export type Database = {
         }
         Insert: {
           access_token: string
+          account_email?: string | null
           calendar_ids?: Json
           created_at?: string
           expires_at?: string | null
@@ -717,6 +722,7 @@ export type Database = {
         }
         Update: {
           access_token?: string
+          account_email?: string | null
           calendar_ids?: Json
           created_at?: string
           expires_at?: string | null
@@ -1516,6 +1522,10 @@ export type Database = {
           unreplied_mails: number
         }[]
       }
+      delete_integration: {
+        Args: { p_provider: string; p_workspace_id: string }
+        Returns: undefined
+      }
       find_similar_companies: {
         Args: { p_name: string; p_workspace_id: string }
         Returns: {
@@ -1546,6 +1556,7 @@ export type Database = {
       integration_status: {
         Args: never
         Returns: {
+          account_email: string | null
           calendar_ids: Json
           expires_at: string
           gmail_scope: string
@@ -1705,6 +1716,17 @@ export type Database = {
       my_channel_ids: { Args: never; Returns: string[] }
       my_dm_thread_ids: { Args: never; Returns: string[] }
       my_email: { Args: never; Returns: string }
+      my_integration: {
+        Args: { p_provider: string; p_workspace_id: string }
+        Returns: {
+          access_token: string
+          account_email: string | null
+          calendar_ids: Json
+          expires_at: string | null
+          refresh_token: string | null
+          scopes: string[]
+        }[]
+      }
       my_member_id: { Args: { ws: string }; Returns: string }
       my_member_ids: { Args: never; Returns: string[] }
       my_workspace_ids: { Args: never; Returns: string[] }
@@ -1715,6 +1737,15 @@ export type Database = {
       }
       recompute_company_tier: {
         Args: { p_company_id: string }
+        Returns: undefined
+      }
+      refresh_integration_token: {
+        Args: {
+          p_access_token: string
+          p_expires_at: string
+          p_provider: string
+          p_workspace_id: string
+        }
         Returns: undefined
       }
       register_contact: {
@@ -1742,6 +1773,18 @@ export type Database = {
       }
       reject_join_request: {
         Args: { p_request_id: string }
+        Returns: undefined
+      }
+      save_integration: {
+        Args: {
+          p_access_token: string
+          p_account_email?: string
+          p_expires_at: string
+          p_provider: string
+          p_refresh_token?: string
+          p_scopes: string[]
+          p_workspace_id: string
+        }
         Returns: undefined
       }
       search_companies: {
@@ -1775,6 +1818,10 @@ export type Database = {
           tier: string
           updated_at: string
         }[]
+      }
+      set_integration_calendars: {
+        Args: { p_calendar_ids: Json; p_provider: string; p_workspace_id: string }
+        Returns: undefined
       }
       size_score: { Args: { p_employees: number }; Returns: number }
       tier_from_score: { Args: { p_total: number }; Returns: string }

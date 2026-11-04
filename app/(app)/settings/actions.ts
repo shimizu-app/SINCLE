@@ -215,3 +215,29 @@ export async function removeStage(stageId: string) {
   revalidatePath("/settings");
   revalidatePath("/customers");
 }
+
+/* ── Google カレンダー ────────────────────────────────────
+   トークンの扱いは lib/google.ts。ここは画面から呼ぶ入口だけ。 */
+
+export async function disconnectGoogleCalendar() {
+  const current = await requireCurrent();
+  const { disconnectGoogle } = await import("@/lib/google");
+  const result = await disconnectGoogle(current.workspace.id);
+  if (result.error) return { error: result.error };
+  revalidatePath("/settings");
+  revalidatePath("/tasks");
+}
+
+/** 使うカレンダーを選ぶ（SCREENS 11）。何も選ばなければ「メインのカレンダー」を使う */
+export async function chooseGoogleCalendars(ids: string[]) {
+  const current = await requireCurrent();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_integration_calendars", {
+    p_workspace_id: current.workspace.id,
+    p_provider: "google",
+    p_calendar_ids: ids.slice(0, 20),
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/tasks");
+}
