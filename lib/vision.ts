@@ -23,13 +23,16 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const VISION_URL = "https://vision.googleapis.com/v1/images:annotate";
 const SCOPE = "https://www.googleapis.com/auth/cloud-vision";
 
+/** ORINAMI（nico-app-512610）のプロジェクト番号。課金エラーの切り分けに使う。 */
+const ORINAMI_PROJECT_NUMBER = "493448789124";
+
 type ServiceAccount = { client_email: string; private_key: string; project_id?: string };
 
 /** 読み取りが駄目だったとき、何をすれば直るのかを画面に出すための区別 */
 export type VisionFailure =
   | { kind: "unconfigured"; message: string }
   | { kind: "key"; message: string }
-  | { kind: "billing"; message: string }
+  | { kind: "billing"; message: string; raw?: string }
   | { kind: "permission"; message: string }
   | { kind: "google"; message: string };
 
@@ -326,11 +329,23 @@ function classify(status: number, message: string): VisionFailure {
     };
   }
   if (/billing/i.test(message)) {
+    // Google の原文には、どのプロジェクトの課金が無いのかが書いてある。
+    // 鍵を別のプロジェクトで作ってしまった場合はここで分かる。
+    const project = message.match(/project #?(\d{6,})/i)?.[1];
+    const ours = project === ORINAMI_PROJECT_NUMBER;
     return {
       kind: "billing",
       message:
-        "Google Cloud のプロジェクトに課金アカウントが紐づいていません。" +
-        "Vision は月1,000枚まで無料ですが、課金アカウントの登録自体は必要です。",
+        (project
+          ? ours
+            ? `Google Cloud のプロジェクト ORINAMI（${project}）に課金アカウントが紐づいていません。`
+            : `このキーは別のプロジェクト（${project}）のものです。ORINAMI（${ORINAMI_PROJECT_NUMBER}）で作ったキーを使ってください。`
+          : "Google Cloud のプロジェクトに課金アカウントが紐づいていません。") +
+        (ours || !project
+          ? "Vision は月1,000枚まで無料ですが、課金アカウントの紐づけ自体は必要です。" +
+            "紐づけた直後なら、数分待ってからお試しください。"
+          : ""),
+      raw: message,
     };
   }
   if (status === 401 || status === 403) {

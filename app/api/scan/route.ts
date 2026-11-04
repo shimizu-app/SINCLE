@@ -50,6 +50,9 @@ export async function POST(request: Request) {
   const result = await readCard(base64);
   if (!result.ok) {
     console.error(`[scan] 失敗 kind=${result.failure.kind} ${result.failure.message}`);
+    if ("raw" in result.failure && result.failure.raw) {
+      console.error(`[scan] Google の原文: ${result.failure.raw}`);
+    }
     return NextResponse.json<ScanResponse>(
       { ok: false, kind: result.failure.kind, message: result.failure.message },
       // 鍵が無いのは利用者の操作ミスではない。画面は手入力へ案内する。
