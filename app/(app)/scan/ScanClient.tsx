@@ -34,15 +34,16 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
   const [fields, setFields] = useState<CardFields | null>(null);
   const [problem, setProblem] = useState<{ kind: string; message: string } | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [queue, setQueue] = useState<CardFields[]>([]);
 
-  const video = useRef<HTMLVideoElement>(null);
-  const stream = useRef<MediaStream | null>(null);
   const album = useRef<HTMLInputElement>(null);
   const batch = useRef<HTMLInputElement>(null);
-  // 画面内のファインダーが開けない端末では、こちらが本線になる。
-  // capture を付けると、OS のカメラがそのまま立ち上がる。
+  // 撮影は OS のカメラに任せる。capture を付けると、選ぶ画面を出さずに
+  // カメラがそのまま立ち上がる。
+  //
+  // 以前は画面の中にファインダーを出していたが（getUserMedia）、
+  // iPhone の Safari はカメラの許可を覚えないので、開くたびに確認が出た。
+  // OS のカメラならこの確認は出ない。ピントもフラッシュも効く。
   const nativeCam = useRef<HTMLInputElement>(null);
 
   /* ── 鍵が入っているか ── */
@@ -77,52 +78,6 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
     }
   }, []);
 
-  /* ── カメラ ── */
-  const stopCamera = useCallback(() => {
-    stream.current?.getTracks().forEach((t) => t.stop());
-    stream.current = null;
-  }, []);
-
-  useEffect(() => {
-    if (phase !== "ready" || configured === null) return;
-    let cancelled = false;
-
-    (async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError("この端末ではカメラを開けません。写真から選んでください。");
-        return;
-      }
-      try {
-        const got = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (cancelled) {
-          got.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        stream.current = got;
-        if (video.current) {
-          video.current.srcObject = got;
-          await video.current.play().catch(() => undefined);
-        }
-        setCameraError(null);
-      } catch (error) {
-        const name = error instanceof Error ? error.name : "";
-        setCameraError(
-          name === "NotAllowedError"
-            ? "カメラを使う許可が下りていません。端末の設定で許可するか、写真から選んでください。"
-            : "カメラを開けませんでした。写真から選んでください。"
-        );
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      stopCamera();
-    };
-  }, [phase, configured, stopCamera]);
-
   /* ── 読み取り ── */
   const send = useCallback(async (dataUrl: string): Promise<CardFields | null> => {
     const res = await fetch("/api/scan", {
@@ -142,7 +97,6 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
     async (dataUrl: string) => {
       setPhase("reading");
       setProblem(null);
-      stopCamera();
       const got = await send(dataUrl);
       if (!got) {
         setPhase("failed");
@@ -151,24 +105,13 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
       setFields(got);
       setPhase("confirm");
     },
-    [send, stopCamera]
+    [send]
   );
 
-  /**
-   * 撮る。
-   *
-   * 画面内のファインダーが動いていればそこから切り出す。
-   * 動いていなければ端末のカメラを開く。
-   * ここを disabled にすると、押しても何も起きないボタンになってしまう。
-   */
+  /** 撮る。OS のカメラを開く。撮った写真は fromFiles に渡る。 */
   const shoot = useCallback(() => {
-    const el = video.current;
-    if (el && el.videoWidth > 0 && !cameraError) {
-      void readOne(toJpeg(el, el.videoWidth, el.videoHeight));
-      return;
-    }
     nativeCam.current?.click();
-  }, [cameraError, readOne]);
+  }, []);
 
   const fromFiles = useCallback(
     async (files: FileList | null) => {
@@ -192,7 +135,6 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
       // ── まとめ読み ──
       setPhase("reading");
       setProblem(null);
-      stopCamera();
 
       const read: CardFields[] = [];
       for (const file of list) {
@@ -211,7 +153,7 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
       saveQueue(rest);
       setPhase("confirm");
     },
-    [readOne, saveQueue, send, stopCamera]
+    [readOne, saveQueue, send]
   );
 
   /* ── 残りの1枚に進む ── */
@@ -335,29 +277,24 @@ export function ScanClient({ workspaceId }: { workspaceId: string }) {
           </button>
         )}
 
-        {/* ── ファインダー ── */}
-        <div
-          className="relative overflow-hidden bg-black"
-          style={{ aspectRatio: "91 / 55", borderRadius: "26px 13px 26px 13px", border: `2px solid ${C.line}` }}
+        {/* ── 撮り方の案内（名刺の縦横比 91:55）── */}
+        <button
+          type="button"
+          onClick={shoot}
+          aria-label="カメラを開いて名刺を撮る"
+          className="relative w-full flex flex-col items-center justify-center gap-2 bg-white"
+          style={{
+            aspectRatio: "91 / 55",
+            borderRadius: "26px 13px 26px 13px",
+            border: `2.5px dashed ${C.line}`,
+          }}
         >
-          <video
-            ref={video}
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-            style={{ opacity: cameraError ? 0 : 1 }}
-          />
-          {cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-xs font-bold" style={{ color: "#fff" }}>
-                {cameraError}
-              </p>
-              <p className="text-[11px] font-bold" style={{ color: "#C8C2B6" }}>
-                下の丸いボタンを押すと、端末のカメラが開きます。
-              </p>
-            </div>
-          )}
-        </div>
+          <ShapeIcon shape="square" color="green" size={40} />
+          <span className="text-sm font-extrabold">名刺を撮る</span>
+          <span className="text-[11px] font-bold px-6 text-center" style={{ color: "#9AA0A6" }}>
+            押すとカメラが開きます。名刺を枠いっぱいに、明るい場所で撮ってください。
+          </span>
+        </button>
 
         {/* ── 中央にシンボル、両脇にアルバムと一括（SCREENS 6）── */}
         <div className="flex items-center justify-center gap-6 pt-1">

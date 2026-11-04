@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { M_PLUS_Rounded_1c } from "next/font/google";
 import { PressFeedback } from "@/components/PressFeedback";
+import { JapaneseValidity } from "@/components/JapaneseValidity";
 import "./globals.css";
 
 // 見出しから本文まで同じ書体で通す。Zen Maru Gothic は
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ja" className={rounded.variable}>
       <body className="antialiased">
         <PressFeedback />
+        <JapaneseValidity />
         {children}
       </body>
     </html>
