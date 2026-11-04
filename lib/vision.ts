@@ -1,5 +1,6 @@
 import "server-only";
 import { createSign } from "node:crypto";
+import { EXPECTED_PEM_BODY, normalizePem } from "./pem";
 
 /**
  * Google Cloud Vision で名刺の文字を読む（SPEC 1章・フェーズ4）。
@@ -27,6 +28,7 @@ type ServiceAccount = { client_email: string; private_key: string; project_id?: 
 /** 読み取りが駄目だったとき、何をすれば直るのかを画面に出すための区別 */
 export type VisionFailure =
   | { kind: "unconfigured"; message: string }
+  | { kind: "key"; message: string }
   | { kind: "billing"; message: string }
   | { kind: "permission"; message: string }
   | { kind: "google"; message: string };
@@ -93,12 +95,26 @@ function readServiceAccount(): KeyRead {
     };
   }
 
+  // 貼る途中で秘密鍵の改行が崩れることがある（空白・欠落・文字の \n）。
+  // 本体が欠けていなければ、組み直して元に戻せる。
+  const pem = normalizePem(sa.private_key);
+  if (!pem.ok) {
+    return { ok: false, reason: `GOOGLE_VISION_SA_KEY の秘密鍵が読めません。${pem.reason}` };
+  }
+  if (pem.bodyLength < EXPECTED_PEM_BODY * 0.9) {
+    return {
+      ok: false,
+      reason:
+        `GOOGLE_VISION_SA_KEY の秘密鍵が短すぎます（本体 ${pem.bodyLength}文字、` +
+        `本来は${EXPECTED_PEM_BODY}文字ほど）。途中で切れているので、ファイルの中身を丸ごと貼り直してください。`,
+    };
+  }
+
   return {
     ok: true,
     sa: {
       client_email: sa.client_email,
-      // 環境変数に貼るとき \n が文字列のまま入ることがある
-      private_key: sa.private_key.replace(/\\n/g, "\n"),
+      private_key: pem.pem,
       project_id: sa.project_id,
     },
   };
@@ -200,10 +216,21 @@ export async function readCard(imageBase64: string): Promise<VisionResult> {
   try {
     token = await accessToken(key.sa);
   } catch (error) {
-    return {
-      ok: false,
-      failure: { kind: "permission", message: messageOf(error) },
-    };
+    const message = messageOf(error);
+    // 署名の段階で落ちたなら、Google に断られたのではなく鍵が開けていない。
+    // 「権限」と出すと Google 側の設定を疑わせてしまうので分ける。
+    if (/DECODER|PEM|asn1|bad base64|unsupported/i.test(message)) {
+      return {
+        ok: false,
+        failure: {
+          kind: "key",
+          message:
+            "秘密鍵を開けませんでした。GOOGLE_VISION_SA_KEY の中身が崩れています。" +
+            "ダウンロードしたJSONファイルの中身を丸ごと貼り直してください。",
+        },
+      };
+    }
+    return { ok: false, failure: { kind: "permission", message } };
   }
 
   const res = await fetch(VISION_URL, {
