@@ -150,9 +150,21 @@ Supabase の既定の雛形はリンクだけを送ります。6桁コードを�
 名刺を撮って読み取るには Google Cloud Vision の鍵が要ります。
 **入れなくてもアプリは動きます**（スキャン画面が手入力へ案内するだけ）。
 
+鍵の入れ方は2通りあります。**どちらか片方で動きます。**
+
+**かんたんな方：APIキー**
+
+1. Google Cloud → APIとサービス → 認証情報 → 「認証情報を作成」→「APIキー」
+2. 作ったキーの「APIの制限」で **Cloud Vision API だけ**に絞る（漏れたときの被害を抑えるため）
+3. 表示された `AIza…` を `GOOGLE_VISION_API_KEY` に入れる
+
+**しっかりした方：サービスアカウントの鍵**
+
 1. Google Cloud のプロジェクトで **Cloud Vision API** を有効にする
 2. サービスアカウントを作り、**JSON キー**を1つ作ってダウンロードする
-3. その JSON を base64 にして `GOOGLE_VISION_SA_KEY` に入れる
+3. そのファイルの中身を `GOOGLE_VISION_SA_KEY` に入れる（そのままでも base64 でもよい）
+
+秘密鍵の改行が貼る途中で崩れても、読み込むときに組み直します（`lib/pem.ts`）。
 
 ```bash
 base64 -w0 nico-app-xxxxxx.json    # Linux（macOS は -i）

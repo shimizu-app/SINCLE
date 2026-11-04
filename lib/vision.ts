@@ -95,6 +95,17 @@ function readServiceAccount(): KeyRead {
     };
   }
 
+  // 説明のために見せた見本（◯ で伏せたもの）がそのまま貼られることがある。
+  // 鍵として使える文字だけを拾うと「1600」などが残り、短すぎる鍵に見えてしまう。
+  if (/[◯○〇…]|（.*文字ほど）/.test(sa.private_key)) {
+    return {
+      ok: false,
+      reason:
+        "GOOGLE_VISION_SA_KEY に、説明用の見本（◯で伏せたもの）が入っています。" +
+        "本物の鍵は、Google Cloud からダウンロードしたJSONファイルの中にあります。",
+    };
+  }
+
   // 貼る途中で秘密鍵の改行が崩れることがある（空白・欠落・文字の \n）。
   // 本体が欠けていなければ、組み直して元に戻せる。
   const pem = normalizePem(sa.private_key);
@@ -144,7 +155,7 @@ function shapeOf(raw: string): string {
 
 /** 鍵が使えるかだけを返す。画面の出し分けに使う。 */
 export function visionConfigured(): boolean {
-  return readServiceAccount().ok;
+  return readServiceAccount().ok || Boolean(process.env.GOOGLE_VISION_API_KEY?.trim());
 }
 
 /* ── アクセストークン ───────────────────────────────────── */
@@ -205,7 +216,13 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
  */
 export async function readCard(imageBase64: string): Promise<VisionResult> {
   const key = readServiceAccount();
+
+  // サービスアカウントの鍵が使えなければ、APIキーを使う。
+  // APIキーは画面に出る短い文字列なので、ファイルを扱わずに済む。
   if (!key.ok) {
+    const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
+    if (apiKey) return callVision(imageBase64, { apiKey });
+
     return {
       ok: false,
       failure: { kind: "unconfigured", message: `${key.reason}（いまは手入力で登録できます）` },
@@ -233,10 +250,22 @@ export async function readCard(imageBase64: string): Promise<VisionResult> {
     return { ok: false, failure: { kind: "permission", message } };
   }
 
-  const res = await fetch(VISION_URL, {
+  return callVision(imageBase64, { token });
+}
+
+/** Vision を呼ぶ。認証はアクセストークンか APIキーのどちらか。 */
+async function callVision(
+  imageBase64: string,
+  auth: { token: string } | { apiKey: string }
+): Promise<VisionResult> {
+  const url = "apiKey" in auth
+    ? `${VISION_URL}?key=${encodeURIComponent(auth.apiKey)}`
+    : VISION_URL;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${token}`,
+      ...("token" in auth ? { authorization: `Bearer ${auth.token}` } : {}),
       "content-type": "application/json",
     },
     body: JSON.stringify({
@@ -276,6 +305,26 @@ function messageOf(error: unknown): string {
  * ここを「失敗しました」で済ませると、課金未設定なのか鍵が違うのか分からない。
  */
 function classify(status: number, message: string): VisionFailure {
+  if (/API key not valid/i.test(message)) {
+    return {
+      kind: "key",
+      message: "GOOGLE_VISION_API_KEY が正しくありません。Google Cloud の画面からコピーし直してください。",
+    };
+  }
+  if (/are blocked|API_KEY_SERVICE_BLOCKED/i.test(message)) {
+    return {
+      kind: "permission",
+      message:
+        "このAPIキーでは Cloud Vision を使えない設定になっています。" +
+        "Google Cloud でキーの「APIの制限」に Cloud Vision API を入れてください。",
+    };
+  }
+  if (/has not been used|is disabled|SERVICE_DISABLED/i.test(message)) {
+    return {
+      kind: "permission",
+      message: "Cloud Vision API が有効になっていません。Google Cloud の「APIとサービス」で有効にしてください。",
+    };
+  }
   if (/billing/i.test(message)) {
     return {
       kind: "billing",
