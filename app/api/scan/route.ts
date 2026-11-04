@@ -45,8 +45,11 @@ export async function POST(request: Request) {
     return bad("too_large", "画像が大きすぎます。もう一度撮ってください。");
   }
 
+  console.log(`[scan] 受け取った画像 約${Math.round((base64.length * 0.75) / 1024)}KB`);
+
   const result = await readCard(base64);
   if (!result.ok) {
+    console.error(`[scan] 失敗 kind=${result.failure.kind} ${result.failure.message}`);
     return NextResponse.json<ScanResponse>(
       { ok: false, kind: result.failure.kind, message: result.failure.message },
       // 鍵が無いのは利用者の操作ミスではない。画面は手入力へ案内する。
@@ -55,16 +58,26 @@ export async function POST(request: Request) {
   }
 
   if (!result.text.trim()) {
+    console.error("[scan] 失敗 kind=empty 文字が取れなかった");
     return bad("empty", "文字を読み取れませんでした。明るい場所で、枠いっぱいに写してください。");
   }
 
-  return NextResponse.json<ScanResponse>({
-    ok: true,
-    fields: parseCard(result.text),
-    text: result.text,
-  });
+  const fields = parseCard(result.text);
+
+  // 名刺の中身そのものは残さない（人の名前や連絡先なので）。
+  // 何文字読めたか、どの欄が埋まったかだけを残す。
+  console.log(
+    `[scan] 成功 ${result.text.length}文字 埋まった欄: ` +
+      (Object.entries(fields)
+        .filter(([, v]) => v)
+        .map(([k]) => k)
+        .join(",") || "なし")
+  );
+
+  return NextResponse.json<ScanResponse>({ ok: true, fields, text: result.text });
 }
 
 function bad(kind: string, message: string) {
+  console.error(`[scan] 失敗 kind=${kind} ${message}`);
   return NextResponse.json<ScanResponse>({ ok: false, kind, message }, { status: 400 });
 }
