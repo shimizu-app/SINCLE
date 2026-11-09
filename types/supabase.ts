@@ -118,37 +118,52 @@ export type Database = {
       }
       booking_links: {
         Row: {
+          calendar_ids: Json
           company_id: string
+          confirmed_at: string | null
           confirmed_event_id: string | null
+          contact_id: string | null
           created_at: string
           duration_min: number
           expires_at: string
           format: string
           id: string
+          member_id: string | null
+          proof_hash: string | null
           slots: Json
           token: string
           workspace_id: string
         }
         Insert: {
+          calendar_ids?: Json
           company_id: string
+          confirmed_at?: string | null
           confirmed_event_id?: string | null
+          contact_id?: string | null
           created_at?: string
           duration_min?: number
           expires_at: string
           format: string
           id?: string
+          member_id?: string | null
+          proof_hash?: string | null
           slots: Json
           token: string
           workspace_id: string
         }
         Update: {
+          calendar_ids?: Json
           company_id?: string
+          confirmed_at?: string | null
           confirmed_event_id?: string | null
+          contact_id?: string | null
           created_at?: string
           duration_min?: number
           expires_at?: string
           format?: string
           id?: string
+          member_id?: string | null
+          proof_hash?: string | null
           slots?: Json
           token?: string
           workspace_id?: string
@@ -1462,6 +1477,43 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      booking_for_confirm: {
+        Args: { p_proof: string; p_token: string }
+        Returns: {
+          access_token: string | null
+          calendar_ids: Json
+          company_id: string
+          company_name: string
+          contact_email: string | null
+          contact_id: string | null
+          contact_name: string | null
+          duration_min: number
+          expires_at: string | null
+          format: string
+          meeting_url: string | null
+          member_id: string
+          organizer_email: string
+          organizer_name: string
+          refresh_token: string | null
+          slots: Json
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
+      booking_page: {
+        Args: { p_token: string }
+        Returns: {
+          company_name: string
+          confirmed_start: string | null
+          contact_name: string | null
+          duration_min: number
+          format: string
+          organizer_name: string | null
+          slots: Json
+          state: string
+          workspace_name: string
+        }[]
+      }
       approve_join_request: { Args: { p_request_id: string }; Returns: string }
       calendar_items: {
         Args: {
@@ -1515,6 +1567,17 @@ export type Database = {
       complete_deal: {
         Args: { p_deal_id: string; p_note?: string }
         Returns: undefined
+      }
+      confirm_booking: {
+        Args: {
+          p_gcal_event_id: string
+          p_meet_url: string
+          p_proof: string
+          p_start: string
+          p_title: string
+          p_token: string
+        }
+        Returns: string
       }
       create_group_channel: {
         Args: {

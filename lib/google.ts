@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { hkdfSync } from "node:crypto";
+import { createHmac, hkdfSync } from "node:crypto";
 import { decryptWith, encryptWith, parseKey } from "./token-crypto";
 
 /**
@@ -18,8 +18,8 @@ import { decryptWith, encryptWith, parseKey } from "./token-crypto";
  *                               無ければクライアントシークレットから鍵を作る。
  *                               別に入れたほうが守りは固い（片方が漏れても開けない）
  *
- * 権限は読み取りだけ（calendar.readonly）。SPEC 6章「権限スコープは必要最小限に」。
- * 予定を書き込む機能（タスクのカレンダー登録・日程調整）を入れるときに広げる。
+ * 権限は、予定を読む（calendar.readonly）と、予定を入れる（calendar.events）。
+ * 入れるのは日程調整で決まった打合せだけ。ほかの予定は書き換えない。
  * Gmail（gmail.readonly）は、Gmail をつなぐと決めた人にだけ追加で求める（lib/gmail.ts）。
  */
 
@@ -32,7 +32,12 @@ export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/calendar.readonly",
+  // 日程調整で決まった打合せを、カレンダーに入れる（予定の作成だけ。SCREENS 10）
+  "https://www.googleapis.com/auth/calendar.events",
 ];
+
+/** 予定を入れる権限。これが無い（古い連携）ときは、つなぎ直してもらう */
+export const CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 /** 連携の入口と戻り先。登録するリダイレクトURIはこれ */
 export const CALLBACK_PATH = "/api/google/callback";
@@ -161,7 +166,7 @@ export type GoogleLink =
   | { state: "needs_migration" }
   | { state: "disconnected" }
   | { state: "expired"; email: string | null }
-  | { state: "connected"; email: string | null; calendarIds: string[]; token: string };
+  | { state: "connected"; email: string | null; calendarIds: string[]; token: string; scopes: string[] };
 
 type Row = {
   access_token: string;
@@ -169,6 +174,7 @@ type Row = {
   expires_at: string | null;
   calendar_ids: unknown;
   account_email: string | null;
+  scopes: string[] | null;
 };
 
 /**
@@ -198,12 +204,13 @@ export async function googleLink(workspaceId: string): Promise<GoogleLink> {
 
   const email = row.account_email;
   const calendarIds = Array.isArray(row.calendar_ids) ? (row.calendar_ids as string[]) : [];
+  const scopes = row.scopes ?? [];
 
   // まだ1分以上もつなら、そのまま使う
   const expires = row.expires_at ? new Date(row.expires_at).getTime() : 0;
   if (expires > Date.now() + 60_000) {
     try {
-      return { state: "connected", email, calendarIds, token: decryptWith(config.key, row.access_token) };
+      return { state: "connected", email, calendarIds, scopes, token: decryptWith(config.key, row.access_token) };
     } catch {
       // 鍵を入れ替えた等で開けない。つなぎ直してもらう
       return { state: "expired", email };
@@ -219,18 +226,8 @@ export async function googleLink(workspaceId: string): Promise<GoogleLink> {
     return { state: "expired", email };
   }
 
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      refresh_token: refresh,
-      grant_type: "refresh_token",
-    }),
-  });
-  const body = (await res.json()) as TokenResponse;
-  if (!res.ok || !body.access_token) return { state: "expired", email };
+  const body = await refreshAccess(config, refresh);
+  if (!body?.access_token) return { state: "expired", email };
 
   await supabase.rpc("refresh_integration_token", {
     p_workspace_id: workspaceId,
@@ -239,7 +236,7 @@ export async function googleLink(workspaceId: string): Promise<GoogleLink> {
     p_expires_at: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
   });
 
-  return { state: "connected", email, calendarIds, token: body.access_token };
+  return { state: "connected", email, calendarIds, scopes, token: body.access_token };
 }
 
 /** 連携を外す。Google 側の許可も取り消してから、こちらの記録を消す */
@@ -270,6 +267,60 @@ export async function disconnectGoogle(workspaceId: string): Promise<{ error?: s
     p_provider: "google",
   });
   return error ? { error: error.message } : {};
+}
+
+async function refreshAccess(config: Config, refresh: string): Promise<TokenResponse | null> {
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: refresh,
+      grant_type: "refresh_token",
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as TokenResponse;
+  return res.ok && body.access_token ? body : null;
+}
+
+/**
+ * 予約ページ（ログインしていないお客さま）から、発行したメンバーのトークンを使う。
+ * 取り直したトークンは保存しない（本人の行は本人しか書けないため）。次も取り直すだけ。
+ */
+export async function accessTokenFor(row: {
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: string | null;
+}): Promise<string | null> {
+  const cfg = googleConfig();
+  if (!cfg.ok || !row.access_token) return null;
+  const expires = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  if (expires > Date.now() + 60_000) {
+    try {
+      return decryptWith(cfg.config.key, row.access_token);
+    } catch {
+      return null;
+    }
+  }
+  if (!row.refresh_token) return null;
+  try {
+    const body = await refreshAccess(cfg.config, decryptWith(cfg.config.key, row.refresh_token));
+    return body?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 予約ページの「証明」。サーバーだけが持つ鍵で token から作る。
+ * データベースには、この値の sha256 だけを残す（022 の booking_for_confirm / confirm_booking）。
+ */
+export function bookingProof(token: string): string | null {
+  const cfg = googleConfig();
+  if (!cfg.ok) return null;
+  const key = Buffer.from(hkdfSync("sha256", cfg.config.key, "syncle", "booking-proof-v1", 32));
+  return createHmac("sha256", key).update(token).digest("base64url");
 }
 
 /* ── カレンダー ─────────────────────────────────────────── */
@@ -354,4 +405,98 @@ export async function listEvents(
   );
 
   return perCalendar.flat();
+}
+
+/**
+ * 空き時間を調べる（予定の中身は読まない。SPEC 6章）。
+ * 返すのは、選んだカレンダー全部の「埋まっている時間」。
+ */
+export async function freeBusy(
+  token: string,
+  calendarIds: string[],
+  from: Date,
+  to: Date
+): Promise<{ busy: { start: string; end: string }[] } | { error: string; status: number }> {
+  const ids = calendarIds.length ? calendarIds : ["primary"];
+  const res = await fetch(`${CAL_API}/freeBusy`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      timeMin: from.toISOString(),
+      timeMax: to.toISOString(),
+      timeZone: "Asia/Tokyo",
+      items: ids.map((id) => ({ id })),
+    }),
+    cache: "no-store",
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    calendars?: Record<string, { busy?: { start: string; end: string }[]; errors?: unknown[] }>;
+    error?: { message?: string };
+  };
+  if (!res.ok) {
+    return { error: body.error?.message ?? `空き時間を調べられませんでした（${res.status}）`, status: res.status };
+  }
+  return { busy: Object.values(body.calendars ?? {}).flatMap((c) => c.busy ?? []) };
+}
+
+/**
+ * 打合せの予定を入れる。お客さまを招待し、Google から招待メールを送ってもらう（sendUpdates=all）。
+ * Google Meet を選んだときは会議のリンクも作る（conferenceData）。
+ */
+export async function createMeeting(
+  token: string,
+  input: {
+    title: string;
+    description: string;
+    start: string;
+    durationMin: number;
+    attendees: { email: string; name?: string }[];
+    meet: boolean;
+    location?: string | null;
+  }
+): Promise<{ id: string; meetUrl: string | null; htmlLink: string | null } | { error: string; status: number }> {
+  const start = new Date(input.start);
+  const end = new Date(start.getTime() + input.durationMin * 60_000);
+  const body: Record<string, unknown> = {
+    summary: input.title,
+    description: input.description,
+    start: { dateTime: start.toISOString(), timeZone: "Asia/Tokyo" },
+    end: { dateTime: end.toISOString(), timeZone: "Asia/Tokyo" },
+    attendees: input.attendees.map((a) => ({ email: a.email, displayName: a.name })),
+    reminders: { useDefault: true },
+  };
+  if (input.location) body.location = input.location;
+  if (input.meet) {
+    body.conferenceData = {
+      createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } },
+    };
+  }
+
+  const q = new URLSearchParams({ sendUpdates: "all", conferenceDataVersion: input.meet ? "1" : "0" });
+  const res = await fetch(`${CAL_API}/calendars/primary/events?${q}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const got = (await res.json().catch(() => ({}))) as {
+    id?: string;
+    hangoutLink?: string;
+    htmlLink?: string;
+    conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+    error?: { message?: string };
+  };
+  if (!res.ok || !got.id) {
+    return { error: got.error?.message ?? `予定を入れられませんでした（${res.status}）`, status: res.status };
+  }
+  const video = got.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri;
+  return { id: got.id, meetUrl: got.hangoutLink ?? video ?? null, htmlLink: got.htmlLink ?? null };
+}
+
+/** 入れた予定を取り消す（確定の書き込みに失敗したときの後始末）。お客さまに取り消しの知らせが行く */
+export async function deleteMeeting(token: string, eventId: string): Promise<void> {
+  await fetch(`${CAL_API}/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token}` },
+  }).catch(() => undefined);
 }

@@ -102,4 +102,9 @@ $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/profile_guard.sql"
 
 echo ""
+echo "══ 予約ページ（022）══"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/booking.sql"
+
+echo ""
 echo "終わりました。データベースは消します。"
