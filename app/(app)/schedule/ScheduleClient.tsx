@@ -149,6 +149,15 @@ export function ScheduleClient(props: {
         )}
       </div>
 
+      {!props.canWrite && (
+        <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: C.orange }}>
+          予約ページで確定したときにカレンダーへ予定を入れるには、Google をつなぎ直して「予定の作成」を許可してください。
+          <a href="/api/google/connect" className="underline ml-1">
+            つなぎ直す
+          </a>
+        </p>
+      )}
+
       {/* ── ② 空き時間 ── */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
@@ -207,27 +216,29 @@ export function ScheduleClient(props: {
 
       {/* ── ③ アクション ── */}
       {picked.length > 0 && (
-        <div className="bg-white p-4 space-y-3 sticky bottom-24" style={{ ...card, boxShadow: "0 8px 24px rgba(0,0,0,.06)" }}>
-          <div className="text-[11px] font-extrabold" style={{ color: "#8A8A8A" }}>
-            選んだ候補
+        <div
+          className="bg-white p-3.5 space-y-2.5 sticky bottom-24 z-10"
+          style={{ ...card, boxShadow: "0 8px 24px rgba(0,0,0,.08)" }}
+        >
+          {/* 張り付いていても候補を隠しすぎないよう、選んだ候補は1行にまとめる */}
+          <div className="text-[11px] font-bold leading-snug" style={{ color: "#6B6B6B" }}>
+            <span className="font-extrabold" style={{ color: C.purple }}>
+              候補 {picked.length}つ：
+            </span>
+            {picked.map((iso) => slotLabel(iso, props.durationMin).replace(/〜.*$/, "")).join(" ／ ")}
           </div>
-          <ul className="text-xs font-bold space-y-0.5">
-            {picked.map((iso) => (
-              <li key={iso}>{slotLabel(iso, props.durationMin)}</li>
-            ))}
-          </ul>
-
-          <Link href={composeHref({ slots: picked.join(",") })} className="block">
-            <OrganicButton type="button" size="md" color="blue" className="w-full">
-              <Mail size={15} strokeWidth={2.8} />
-              候補を入れてメールを作る
-            </OrganicButton>
-          </Link>
 
           {!url ? (
+            <div className="grid grid-cols-2 gap-2">
+            <Link href={composeHref({ slots: picked.join(",") })} className="block">
+              <OrganicButton type="button" size="sm" color="blue" className="w-full">
+                <Mail size={13} strokeWidth={2.8} />
+                メールを作る
+              </OrganicButton>
+            </Link>
             <OrganicButton
               type="button"
-              size="md"
+              size="sm"
               variant="outline"
               color="purple"
               className="w-full"
@@ -248,9 +259,10 @@ export function ScheduleClient(props: {
                 })
               }
             >
-              <Link2 size={15} strokeWidth={2.8} />
+              <Link2 size={13} strokeWidth={2.8} />
               {pending ? "発行しています…" : "予約ページを発行"}
             </OrganicButton>
+            </div>
           ) : (
             <div className="space-y-2">
               <div
@@ -286,14 +298,6 @@ export function ScheduleClient(props: {
             </div>
           )}
 
-          {!props.canWrite && (
-            <p className="text-[11px] font-bold leading-relaxed" style={{ color: C.orange }}>
-              予約ページで確定したときにカレンダーへ予定を入れるには、Google をつなぎ直して「予定の作成」を許可してください。
-              <a href="/api/google/connect" className="underline ml-1">
-                つなぎ直す
-              </a>
-            </p>
-          )}
           {error && (
             <p className="text-xs font-bold" style={{ color: C.red }} role="alert">
               {error}

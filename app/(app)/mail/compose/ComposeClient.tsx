@@ -266,10 +266,17 @@ export function ComposeClient(props: {
       {/* ── 送る ── */}
       <div className="space-y-2">
         {props.canSend ? (
+          <>
           <OrganicButton type="button" size="lg" color="blue" className="w-full" disabled={pending || !hasDraft} onClick={send}>
             <Send size={16} strokeWidth={2.8} />
-            {busy === "send" ? "送っています…" : `Gmail で送る${props.fromAddress ? `（${props.fromAddress}）` : ""}`}
+            {busy === "send" ? "送っています…" : "Gmail で送る"}
           </OrganicButton>
+          {props.fromAddress && (
+            <p className="text-[11px] font-bold text-center" style={{ color: "#9AA0A6" }}>
+              差出人：{props.fromAddress}
+            </p>
+          )}
+          </>
         ) : (
           <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: "#9AA0A6" }}>
             Gmail をつなぐと、ここから送れます。
