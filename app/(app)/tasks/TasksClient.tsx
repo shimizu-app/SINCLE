@@ -12,6 +12,7 @@ export function TasksClient({
   companies,
   members,
   myMemberId,
+  groupBy,
 }: {
   tasks: TaskRow[];
   todos: TodoRow[];
@@ -19,6 +20,7 @@ export function TasksClient({
   companies: SheetCompany[];
   members: SheetMember[];
   myMemberId: string;
+  groupBy?: "company" | "assignee";
 }) {
   const [open, setOpen] = useState(false);
 
@@ -30,6 +32,7 @@ export function TasksClient({
         subtasks={subtasks}
         myMemberId={myMemberId}
         onAdd={() => setOpen(true)}
+        groupBy={groupBy}
       />
       <TaskSheet
         open={open}

@@ -3,11 +3,15 @@ import { C, type ColorKey, type ShapeKey } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { SectionHead, ShapeIcon } from "@/components/ui";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
+import { MemberDot, SectionHead, ShapeIcon } from "@/components/ui";
 import { MemberAdmin, type JoinRequest, type MemberInfo } from "./MemberAdmin";
 import { StageAdmin, type StageRow } from "./StageAdmin";
 import { GoogleCalendarCard, type GoogleCardProps } from "./GoogleCalendarCard";
 import { SecurityCard } from "./SecurityCard";
+import { PersonalPrefs } from "./PersonalPrefs";
+import { defaultSignature } from "@/lib/signature";
 import { GmailCard, type GmailCardProps, type MailContact } from "./GmailCard";
 import { googleLink, listCalendars } from "@/lib/google";
 import { gmailState } from "@/lib/gmail";
@@ -182,6 +186,21 @@ export default async function SettingsPage({
           <GmailCard {...gmailProps} />
         </section>
 
+        <section id="prefs">
+          <SectionHead
+            shape="sun"
+            color="yellow"
+            title="あなたの設定"
+            desc="タスクの見せ方・メールの署名・会議のURL（あなたにだけ効きます）"
+          />
+          <PersonalPrefs
+            taskView={current.member.task_view === "assignee" ? "assignee" : "company"}
+            signature={current.member.signature ?? ""}
+            meetingUrl={current.member.meeting_url ?? ""}
+            defaultSignature={defaultSignature(current.member.name, current.member.role, current.workspace.name, current.email)}
+          />
+        </section>
+
         <section id="security">
           <SectionHead shape="stamp" color="red" title="セキュリティ" desc="Face ID でのロック（この端末）" />
           <SecurityCard
@@ -192,8 +211,22 @@ export default async function SettingsPage({
         </section>
 
 
-        <section>
+        <section id="account">
           <SectionHead shape="drop" color="red" title="アカウント" desc={current.email} />
+          <Link
+            href={`/profile/${current.member.id}`}
+            className="flex items-center gap-3 bg-white p-3.5 mb-2"
+            style={card}
+          >
+            <MemberDot name={current.member.name} avatar={current.member.avatar} size={44} />
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-extrabold truncate">{current.member.name}</span>
+              <span className="block text-[11px] font-bold truncate" style={{ color: "#9AA0A6" }}>
+                {current.member.role} ・ アイコン・カバー・表示名・ひとことを変える
+              </span>
+            </span>
+            <ChevronRight size={16} strokeWidth={2.8} style={{ color: "#C8C2B6" }} />
+          </Link>
           <form action={signOut}>
             <button
               type="submit"

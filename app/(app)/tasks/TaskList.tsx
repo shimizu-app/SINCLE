@@ -64,19 +64,32 @@ export function TaskList({
   subtasks,
   myMemberId,
   onAdd,
+  groupBy = "company",
 }: {
   tasks: TaskRow[];
   todos: TodoRow[];
   subtasks: Subtask[];
   myMemberId: string;
   onAdd: () => void;
+  /** 設定の「タスクの見せ方」（SCREENS 11）。会社ごと / 担当者ごと */
+  groupBy?: "company" | "assignee";
 }) {
-  // 会社ごとにまとめる（SCREENS 7-1）
-  const groups = new Map<string, { name: string; id: string | null; rows: TaskRow[] }>();
+  // 会社ごと（SCREENS 7-1）か、担当者ごとにまとめる
+  const groups = new Map<
+    string,
+    { name: string; id: string | null; kind: "company" | "assignee"; avatar: Avatar | null; rows: TaskRow[] }
+  >();
   for (const t of tasks) {
-    const key = t.company_id ?? "__none__";
+    const byPerson = groupBy === "assignee";
+    const key = (byPerson ? t.assignee_id : t.company_id) ?? "__none__";
     if (!groups.has(key)) {
-      groups.set(key, { name: t.company_name ?? "会社なし", id: t.company_id, rows: [] });
+      groups.set(key, {
+        name: byPerson ? t.assignee_name ?? "担当なし" : t.company_name ?? "会社なし",
+        id: byPerson ? t.assignee_id : t.company_id,
+        kind: groupBy,
+        avatar: byPerson ? t.assignee_avatar : null,
+        rows: [],
+      });
     }
     groups.get(key)!.rows.push(t);
   }
@@ -122,14 +135,26 @@ export function TaskList({
 
       {/* ── 会社のタスク ── */}
       <section className="space-y-2">
-        <Head shape="sun" color="yellow" title="会社のタスク" count={tasks.length} />
+        <Head
+          shape="sun"
+          color="yellow"
+          title={groupBy === "assignee" ? "会社のタスク（担当者ごと）" : "会社のタスク"}
+          count={tasks.length}
+        />
         {tasks.length === 0 ? (
           <Muted>いまは空です。</Muted>
         ) : (
           [...groups.values()].map((group) => (
             <div key={group.id ?? "none"} className="space-y-2">
               <div className="flex items-center gap-2 px-1 pt-1">
-                {group.id ? (
+                {group.kind === "assignee" && group.id ? (
+                  <Link href={`/profile/${group.id}`} className="flex items-center gap-1.5 min-w-0">
+                    <MemberDot name={group.name} avatar={group.avatar} size={22} />
+                    <span className="text-xs font-extrabold truncate" style={{ color: C.purple }}>
+                      {group.id === myMemberId ? `${group.name}（あなた）` : group.name}
+                    </span>
+                  </Link>
+                ) : group.kind === "company" && group.id ? (
                   <Link
                     href={`/customers/${group.id}`}
                     className="text-xs font-extrabold truncate"

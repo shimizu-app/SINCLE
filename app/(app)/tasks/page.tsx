@@ -150,6 +150,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             companies={companiesRes.data ?? []}
             members={membersRes.data ?? []}
             myMemberId={current.member.id}
+            groupBy={current.member.task_view === "assignee" ? "assignee" : "company"}
           />
         )}
 

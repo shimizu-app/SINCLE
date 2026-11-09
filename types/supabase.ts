@@ -1370,10 +1370,13 @@ export type Database = {
           email: string
           id: string
           is_admin: boolean
+          meeting_url: string | null
           name: string
           note: string | null
           role: string
+          signature: string | null
           status: string
+          task_view: string
           user_id: string | null
           workspace_id: string
         }
@@ -1384,10 +1387,13 @@ export type Database = {
           email: string
           id?: string
           is_admin?: boolean
+          meeting_url?: string | null
           name: string
           note?: string | null
           role?: string
+          signature?: string | null
           status?: string
+          task_view?: string
           user_id?: string | null
           workspace_id: string
         }
@@ -1398,10 +1404,13 @@ export type Database = {
           email?: string
           id?: string
           is_admin?: boolean
+          meeting_url?: string | null
           name?: string
           note?: string | null
           role?: string
+          signature?: string | null
           status?: string
+          task_view?: string
           user_id?: string | null
           workspace_id?: string
         }
