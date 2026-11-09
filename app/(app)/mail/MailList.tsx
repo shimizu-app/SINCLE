@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { CheckSquare, ChevronDown } from "lucide-react";
+import { CheckSquare, ChevronDown, Sparkles } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { stripQuoted } from "@/lib/mail-parse";
 import { getMailBody, mailToTask } from "./actions";
@@ -195,6 +195,16 @@ function MailCard({ mail, showCompany, odd }: { mail: MailItem; showCompany: boo
                 {taskState === "todo" ? "自分のTODOに入れました" : "タスクにしました"}
               </Link>
             ))}
+          {unreplied && (
+            <Link
+              href={`/mail/compose?reply=${mail.id}`}
+              className="flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-1.5"
+              style={{ color: "#fff", background: C.purple, borderRadius: "12px 6px 12px 6px" }}
+            >
+              <Sparkles size={12} strokeWidth={3} />
+              AIで返信
+            </Link>
+          )}
           {problem && (
             <span className="text-[11px] font-bold w-full" style={{ color: C.red }} role="alert">
               {problem}

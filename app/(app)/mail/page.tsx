@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Sparkles } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -76,7 +77,20 @@ export default async function MailPage({
 
   return (
     <>
-      <ScreenHeader title="メール" subtitle={current.workspace.name} />
+      <ScreenHeader
+        title="メール"
+        subtitle={current.workspace.name}
+        actions={
+          <Link
+            href="/mail/compose"
+            className="flex items-center gap-1 text-xs font-extrabold px-3 py-2 text-white"
+            style={{ background: C.purple, borderRadius: "14px 7px 14px 7px" }}
+          >
+            <Sparkles size={13} strokeWidth={3} />
+            メールを作る
+          </Link>
+        }
+      />
       <div className="px-4 py-4 space-y-4">
         {said && (
           <p
@@ -143,8 +157,7 @@ export default async function MailPage({
         )}
 
         <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: "#9AA0A6" }}>
-          ここに並ぶのは、チームのメンバーが Gmail から取り込んだメールです（全員に見えます）。
-          AIでの返信の下書きは、これから入ります。
+          ここに並ぶのは、チームのメンバーが Gmail から取り込んだメールと、SYNCLE から送ったメールです（全員に見えます）。
         </p>
       </div>
     </>

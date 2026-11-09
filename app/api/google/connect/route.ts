@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireCurrent } from "@/lib/workspace";
-import { CALLBACK_PATH, GMAIL_READ_SCOPE, authorizeUrl, googleConfig } from "@/lib/google";
+import { CALLBACK_PATH, GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE, authorizeUrl, googleConfig } from "@/lib/google";
 
 /**
  * Google 連携の入口。同意画面へ送り出す。
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const redirectUri = new URL(CALLBACK_PATH, request.nextUrl.origin).toString();
 
   const res = NextResponse.redirect(
-    authorizeUrl(cfg.config, redirectUri, state, gmail ? [GMAIL_READ_SCOPE] : [])
+    authorizeUrl(cfg.config, redirectUri, state, gmail ? [GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE] : [])
   );
   const cookie = {
     httpOnly: true,

@@ -68,6 +68,8 @@ export function googleConfig(): { ok: true; config: Config } | { ok: false; miss
 
 /** Gmail の読み取り。メール画面・設定の「Gmail をつなぐ」から来たときだけ足す */
 export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+/** Gmail からの送信（AIメールの「送信」。送るだけで、受信箱は書き換えない） */
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 export function authorizeUrl(
   config: Config,

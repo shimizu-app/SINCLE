@@ -324,6 +324,13 @@ export default async function CompanyPage({
 
         {tab.key === "mail" && (
           <>
+            <Link
+              href={`/mail/compose?company=${id}`}
+              className="flex items-center justify-center gap-1.5 text-sm font-extrabold py-3 text-white"
+              style={{ background: C.purple, borderRadius: "22px 11px 22px 11px" }}
+            >
+              AIで下書きしてメールを作成
+            </Link>
             <div className="flex items-center gap-2">
               <p className="flex-1 text-[11px] font-bold leading-relaxed" style={{ color: "#9AA0A6" }}>
                 この会社の人とのやりとり。チームのメンバーが Gmail から取り込んだものです。
