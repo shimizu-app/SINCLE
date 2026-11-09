@@ -102,3 +102,18 @@ test("会社名が無くても他は拾う", () => {
   assert.equal(got.contactName, "山田 次郎");
   assert.equal(got.email, "jiro@example.com");
 });
+
+test("カタカナの役職も拾う（ディレクターなど）", () => {
+  const got = parseCard(["株式会社サンプル", "クリエイティブ部", "アートディレクター", "山田 太郎", "taro@sample.co.jp"].join("\n"));
+  assert.equal(got.title, "アートディレクター");
+  assert.equal(got.dept, "クリエイティブ部");
+  assert.equal(got.contactName, "山田 太郎");
+
+  const pm = parseCard(["株式会社サンプル", "シニアプロデューサー 佐藤 花子", "hanako@sample.co.jp"].join("\n"));
+  assert.match(pm.title ?? "", /プロデューサー/);
+});
+
+test("英語の役職は単語の切れ目で見る", () => {
+  const got = parseCard(["Leading Edge Inc.", "Head of Sales", "John Smith", "john@leading.example"].join("\n"));
+  assert.equal(got.title, "Head of Sales");
+});

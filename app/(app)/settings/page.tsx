@@ -7,15 +7,12 @@ import { SectionHead, ShapeIcon } from "@/components/ui";
 import { MemberAdmin, type JoinRequest, type MemberInfo } from "./MemberAdmin";
 import { StageAdmin, type StageRow } from "./StageAdmin";
 import { GoogleCalendarCard, type GoogleCardProps } from "./GoogleCalendarCard";
+import { SecurityCard } from "./SecurityCard";
 import { GmailCard, type GmailCardProps, type MailContact } from "./GmailCard";
 import { googleLink, listCalendars } from "@/lib/google";
 import { gmailState } from "@/lib/gmail";
 import { signOut } from "@/app/auth/actions";
 
-/** まだ入っていない設定。入ったものはここから外す。 */
-const LATER: { shape: ShapeKey; color: ColorKey; title: string; desc: string; phase: string }[] = [
-  { shape: "stamp", color: "red", title: "セキュリティ", desc: "Face ID でのロック", phase: "フェーズ4" },
-];
 
 /** Google から戻ってきたときの一言（?google=…） */
 function googleNotice(result?: string, detail?: string): { tone: "ok" | "ng"; text: string } | undefined {
@@ -185,32 +182,15 @@ export default async function SettingsPage({
           <GmailCard {...gmailProps} />
         </section>
 
-        <section>
-          <SectionHead shape="blob" color="orange" title="これから入るもの" desc="フェーズごとに順番に足していきます" />
-          <div className="space-y-2">
-            {LATER.map((item, i) => (
-              <div
-                key={item.title}
-                className="flex items-center gap-3 bg-white p-3.5 opacity-60"
-                style={{
-                  borderRadius: i % 2 ? "22px 11px 22px 11px" : "11px 22px 11px 22px",
-                  border: `2px solid ${C.line}`,
-                }}
-              >
-                <ShapeIcon shape={item.shape} color={item.color} size={32} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-extrabold truncate">{item.title}</div>
-                  <div className="text-[11px] font-bold truncate" style={{ color: "#9AA0A6" }}>
-                    {item.desc}
-                  </div>
-                </div>
-                <span className="text-[11px] font-bold shrink-0" style={{ color: "#C8C2B6" }}>
-                  {item.phase}
-                </span>
-              </div>
-            ))}
-          </div>
+        <section id="security">
+          <SectionHead shape="stamp" color="red" title="セキュリティ" desc="Face ID でのロック（この端末）" />
+          <SecurityCard
+            userId={current.member.user_id ?? current.member.id}
+            email={current.email}
+            name={current.member.name}
+          />
         </section>
+
 
         <section>
           <SectionHead shape="drop" color="red" title="アカウント" desc={current.email} />

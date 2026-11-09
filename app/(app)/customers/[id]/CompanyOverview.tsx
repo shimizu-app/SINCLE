@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { Calendar, CheckCircle2, Clock, Mail } from "lucide-react";
 import { C, SOFT, INDUSTRIES, DEAL_TYPES, sizeScore } from "@/lib/design";
-import { OrganicButton, SectionHead, ShapeIcon, TierChip } from "@/components/ui";
+import { OrganicButton, SectionHead, TierChip } from "@/components/ui";
 import { updateCompany, type UpdateResult } from "../actions";
 import type { Tables } from "@/types/supabase";
 import type { Tier } from "@/types/db";
@@ -41,11 +42,13 @@ export function CompanyOverview({
   const progress = stage && stages.length ? Math.round(((stage.position + 1) / stages.length) * 100) : null;
   const tier = (company.tier_manual ?? company.tier) as Tier | null;
 
+  // SCREENS 4 のクイックアクション。それぞれの場所へ飛ぶ
+  const base = `/customers/${company.id}`;
   const quick = [
-    { icon: Mail, label: "メール", tone: "blue" as const, phase: "フェーズ6" },
-    { icon: Calendar, label: "日程調整", tone: "green" as const, phase: "フェーズ6" },
-    { icon: Clock, label: "履歴", tone: "purple" as const, phase: "フェーズ5" },
-    { icon: CheckCircle2, label: "タスク", tone: "yellow" as const, phase: "フェーズ3" },
+    { icon: Mail, label: "メール", tone: "blue" as const, href: `${base}?tab=mail` },
+    { icon: Calendar, label: "日程調整", tone: "green" as const, href: `/schedule?company=${company.id}` },
+    { icon: Clock, label: "履歴", tone: "purple" as const, href: `${base}?tab=timeline` },
+    { icon: CheckCircle2, label: "タスク", tone: "yellow" as const, href: `${base}?tab=tasks` },
   ];
 
   const info: [string, string | null][] = [
@@ -61,22 +64,20 @@ export function CompanyOverview({
       {/* ── クイックアクション ── */}
       <div className="grid grid-cols-4 gap-2">
         {quick.map((q, i) => (
-          <button
+          <Link
             key={q.label}
-            type="button"
-            title={`${q.phase}で使えるようになります`}
-            className="flex flex-col items-center gap-1.5 py-3 bg-white opacity-50 cursor-not-allowed"
+            href={q.href}
+            className="flex flex-col items-center gap-1.5 py-3 bg-white"
             style={{
               borderRadius: i % 2 ? "11px 22px 11px 22px" : "22px 11px 22px 11px",
               border: `2px solid ${C.line}`,
             }}
-            disabled
           >
             <q.icon size={18} strokeWidth={2.5} style={{ color: C[q.tone] }} />
-            <span className="text-[10px] font-bold" style={{ color: "#9AA0A6" }}>
+            <span className="text-[10px] font-bold" style={{ color: "#6B6B6B" }}>
               {q.label}
             </span>
-          </button>
+          </Link>
         ))}
       </div>
 
@@ -352,17 +353,6 @@ export function CompanyOverview({
           </form>
         )}
       </section>
-
-      <div
-        className="flex items-center gap-2.5 p-3.5"
-        style={{ background: SOFT.lime, borderRadius: "22px 11px 22px 11px" }}
-      >
-        <ShapeIcon shape="clover" color="green" size={30} />
-        <p className="text-[11px] font-bold leading-snug" style={{ color: "#4A7A3A" }}>
-          履歴・タスク・チャンネル・メールは、フェーズ3以降で
-          このタブから使えるようになります。
-        </p>
-      </div>
     </div>
   );
 }
