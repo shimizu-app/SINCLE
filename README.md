@@ -41,7 +41,7 @@ Next.js 15（App Router）/ React 19 / TypeScript / Tailwind CSS v4 / Supabase /
 | Google カレンダー連携（つなぐ・使うカレンダーを選ぶ・タスクのカレンダーに予定を出す） | ○ Google 側の設定が要る（下記） |
 | Gmail の取り込み（登録した相手とのやりとりだけ・範囲3段階・相手ごとにオフ・未返信をタスクに） | ○ Google 側の設定と `021` が要る（下記） |
 | 日程調整（空き時間・候補を4つまで・メールに入れる）と予約ページ（お客さまが選んで確定） | ○ Google 側の設定と `022` が要る |
-| AIメール作成・AIで返信・修正ボタン・Gmail で送信・署名 | ○ `ANTHROPIC_API_KEY` と `022` が要る（送信は Gmail の連携） |
+| AIメール作成・AIで返信・修正ボタン・Gmail で送信・署名 | ○ `GEMINI_API_KEY` と `022` が要る（送信は Gmail の連携） |
 | プロフィール（カバー・アイコン・ひとこと・1対1で話す）とアカウント設定 | ○ `022` が要る |
 | タスクの見せ方（会社ごと／担当者ごと） | ○ `022` が要る |
 | Face ID でのロック（端末の生体認証・既定オン・設定で外せる） | ○ |
@@ -269,11 +269,17 @@ Google Meet を選んでいれば会議リンクも作ります。打合せの�
 
 ### 5-4. AIメール（任意・フェーズ6）
 
-1. Anthropic の API キーを作り、Vercel の環境変数 `ANTHROPIC_API_KEY` に入れる（Production と Preview）
-2. 送信まで SYNCLE から行うなら、Google Cloud の同意画面に `https://www.googleapis.com/auth/gmail.send` を足し、
+下書きは **Gemini**（Google）で作ります。Claude に戻すときは `GEMINI_API_KEY` を外して `ANTHROPIC_API_KEY` を入れます。
+
+1. https://aistudio.google.com/apikey で API キーを作る。**プロジェクトは課金を有効にしたもの（ORINAMI / nico-app-512610）を選ぶ**
+   - 課金の無いプロジェクトのキーは「無料枠」になり、送った内容（お客さまのメール本文など）と答えを
+     Google が製品の改善に使い、人が読むこともあります（Gemini API の規約）
+   - 課金のあるプロジェクトなら使われません。下書き1通は数千トークンで、1円にも届きません
+2. Vercel の環境変数 `GEMINI_API_KEY` に入れる（Production と Preview）。入れたらデプロイし直す
+3. 送信まで SYNCLE から行うなら、Google Cloud の同意画面に `https://www.googleapis.com/auth/gmail.send` を足し、
    メール画面から Gmail をつなぎ直す
 
-モデルは SPEC 1章のとおり `claude-sonnet-4-6`。`ANTHROPIC_MODEL` で替えられます。
+モデルは `gemini-3.5-flash-lite`。`GEMINI_MODEL` で替えられます（例 `gemini-3.8-flash`）。
 AI には金額・納期・実績を書かせません。日程の候補・予約ページの URL・署名は AI に書かせず、こちらで差し込みます。
 キーが無くても、手で書いて「メールアプリで開く」で送れます。
 

@@ -197,7 +197,7 @@ export function ComposeClient(props: {
         </OrganicButton>
       ) : (
         <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: C.orange }}>
-          AIの設定（ANTHROPIC_API_KEY）がまだなので、AIの下書きは使えません。下で手で書いて送れます。
+          AIの設定（GEMINI_API_KEY）がまだなので、AIの下書きは使えません。下で手で書いて送れます。
         </p>
       )}
 
