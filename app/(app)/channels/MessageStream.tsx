@@ -27,6 +27,8 @@ type Props = {
   /** author_id → 表示名・アバター（Realtime で届く行には名前が入らないため） */
   people: Record<string, { name: string; avatar: Avatar | null }>;
   placeholder?: string;
+  /** 読むだけ（「全員の名刺を見る」で人の会社のチャンネルを見ているとき）。入力欄を出さない */
+  readOnly?: boolean;
 };
 
 /**
@@ -39,7 +41,7 @@ type Props = {
  * どちらで届いても1つにまとめる（前は仮のものが残って、自分の画面に2回出ていた）。
  */
 export function MessageStream({
-  kind, targetId, initial, myMemberId, people, placeholder,
+  kind, targetId, initial, myMemberId, people, placeholder, readOnly = false,
 }: Props) {
   const [messages, setMessages] = useState<StreamMessage[]>(initial);
   const [text, setText] = useState("");
@@ -226,6 +228,14 @@ export function MessageStream({
       </div>
 
       {/* ── 入力欄 ── */}
+      {readOnly ? (
+        <p
+          className="fixed left-0 right-0 z-10 px-4 py-3 bg-white text-[11px] font-bold text-center"
+          style={{ bottom: "calc(env(safe-area-inset-bottom) + 76px)", borderTop: `2px solid ${C.line}`, color: "#9AA0A6" }}
+        >
+          見るだけのチャンネルです（人が登録した会社）
+        </p>
+      ) : (
       <div
         className="fixed left-0 right-0 z-10 px-4 py-3 bg-white"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 76px)", borderTop: `2px solid ${C.line}` }}
@@ -264,6 +274,7 @@ export function MessageStream({
           </button>
         </div>
       </div>
+      )}
     </>
   );
 }

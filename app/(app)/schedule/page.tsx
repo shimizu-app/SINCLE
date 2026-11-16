@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { CALENDAR_WRITE_SCOPE, freeBusy, googleLink, listCalendars } from "@/lib/google";
 import { DURATIONS, FORMATS, WEEKS, buildSlots, searchWindow, type DaySlots } from "@/lib/slots";
 import { ScheduleClient } from "./ScheduleClient";
+import { mineFilter } from "@/lib/customers";
 
 type Params = { company?: string; contact?: string; d?: string; f?: string; w?: string; cal?: string };
 
@@ -24,6 +25,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       .select("id, name")
       .eq("workspace_id", current.workspace.id)
       .is("archived_at", null)
+      .or(mineFilter(current.member.id))
       .order("name")
       .limit(300);
     return (

@@ -8,6 +8,7 @@ import { TaskCalendar, type CalendarItem } from "./TaskCalendar";
 import { googleLink, listEvents } from "@/lib/google";
 import { Memos, type MemoRow } from "./Memos";
 import type { Subtask, TaskRow, TodoRow } from "./TaskList";
+import { mineFilter } from "@/lib/customers";
 
 const TABS = [
   { key: "list", label: "リスト" },
@@ -53,6 +54,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       .select("id, name")
       .eq("workspace_id", ws)
       .is("archived_at", null)
+      .or(mineFilter(current.member.id))
       .order("name"),
     supabase
       .from("workspace_members")

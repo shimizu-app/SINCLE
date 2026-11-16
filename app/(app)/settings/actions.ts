@@ -87,6 +87,30 @@ export async function makeInviteLink(_prev: MemberResult, form: FormData): Promi
   return { ok: row.token };
 }
 
+/**
+ * 「全員の名刺を見る」許可を付ける・外す（023）。管理者だけ。
+ * 管理者でも自動では付かないので、自分に付けるときもここから。
+ */
+export async function setViewAll(memberId: string, on: boolean) {
+  const current = await requireCurrent();
+  if (!current.member.is_admin) return { error: "管理者だけが変えられます。" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .update({ can_view_all: on })
+    .eq("id", memberId)
+    .eq("workspace_id", current.workspace.id)
+    .select("id");
+  if (error) {
+    if (/can_view_all|column/i.test(error.message)) return { error: "データベースの更新（023）がまだです。" };
+    return { error: error.message };
+  }
+  if (!data?.length) return { error: "メンバーが見つかりません。" };
+  revalidatePath("/settings");
+  revalidatePath("/customers");
+}
+
 /** 同ドメイン参加の設定 */
 export async function setOpenJoin(open: boolean) {
   const current = await requireCurrent();

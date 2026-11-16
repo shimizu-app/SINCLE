@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Check, Copy, Link2, UserPlus, X } from "lucide-react";
+import { Check, Copy, Eye, Link2, UserPlus, X } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { MemberDot, OrganicButton, SectionHead } from "@/components/ui";
 import {
-  approveRequest, inviteMember, makeInviteLink, rejectRequest, removeMember, setOpenJoin,
+  approveRequest, inviteMember, makeInviteLink, rejectRequest, removeMember, setOpenJoin, setViewAll,
   type MemberResult,
 } from "./actions";
 import type { Avatar } from "@/types/db";
@@ -21,6 +21,8 @@ export type MemberInfo = {
   is_me: boolean;
   company_count: number;
   open_task_count: number;
+  /** 「全員の名刺を見る」許可（023） */
+  can_view_all?: boolean;
 };
 
 export type JoinRequest = { id: string; email: string; name: string | null; via: string };
@@ -61,13 +63,20 @@ export function MemberAdmin({
       {/* ── メンバー一覧 ── */}
       <section>
         <SectionHead shape="flower" color="purple" title="メンバー" desc={`${members.length}人`} />
+        <p className="text-[11px] font-bold leading-relaxed px-1 pb-2" style={{ color: "#9AA0A6" }}>
+          名刺は、登録した本人と担当者だけが見られます（会社ごとに「チームに共有」もできます）。
+          {isAdmin
+            ? "全員の名刺を見てよい人だけ、「全員の名刺を見る」をオンにしてください。管理者でも、オンにしないと見えません。"
+            : "全員の名刺を見る許可は、管理者が出します。"}
+        </p>
         <div className="space-y-2">
           {members.map((m) => (
             <div
               key={m.id}
-              className="flex items-center gap-2.5 p-3 bg-white"
+              className="p-3 bg-white space-y-2"
               style={{ ...field, borderRadius: "22px 11px 22px 11px" }}
             >
+            <div className="flex items-center gap-2.5">
               <MemberDot name={m.name} avatar={m.avatar} size={34} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -96,6 +105,17 @@ export function MemberAdmin({
                   <X size={15} strokeWidth={3} style={{ color: "#C8C2B6" }} />
                 </button>
               )}
+            </div>
+            {isAdmin ? (
+              <ViewAllSwitch memberId={m.id} name={m.name} initial={Boolean(m.can_view_all)} />
+            ) : (
+              m.can_view_all && (
+                <div className="flex items-center gap-1 text-[10px] font-extrabold pl-11" style={{ color: C.green }}>
+                  <Eye size={11} strokeWidth={3} />
+                  全員の名刺を見られます
+                </div>
+              )
+            )}
             </div>
           ))}
         </div>
@@ -346,6 +366,57 @@ export function MemberAdmin({
             </form>
           </section>
         </>
+      )}
+    </div>
+  );
+}
+
+/** 「全員の名刺を見る」のオン・オフ（管理者だけ）。023 */
+function ViewAllSwitch({ memberId, name, initial }: { memberId: string; name: string; initial: boolean }) {
+  const [on, setOn] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const toggle = () => {
+    const next = !on;
+    setOn(next);
+    setError(null);
+    start(async () => {
+      const r = await setViewAll(memberId, next);
+      if (r && "error" in r) {
+        setOn(!next);
+        setError(r.error);
+      }
+    });
+  };
+
+  return (
+    <div className="pl-11">
+      <div className="flex items-center gap-2">
+        <Eye size={13} strokeWidth={2.6} style={{ color: on ? C.green : "#C8C2B6" }} className="shrink-0" />
+        <span className="flex-1 text-[11px] font-bold" style={{ color: on ? C.green : "#6B6B6B" }}>
+          全員の名刺を見る
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label={`${name} に全員の名刺を見せる`}
+          onClick={toggle}
+          disabled={pending}
+          className="shrink-0 w-11 h-6 rounded-full relative disabled:opacity-60"
+          style={{ background: on ? C.green : "#D9D4CA", transition: "background .2s" }}
+        >
+          <span
+            className="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white"
+            style={{ left: on ? 23 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.2)" }}
+          />
+        </button>
+      </div>
+      {error && (
+        <p className="text-[11px] font-bold pt-1" style={{ color: C.red }} role="alert">
+          {error}
+        </p>
       )}
     </div>
   );

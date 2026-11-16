@@ -29,11 +29,11 @@ select gmail_scope as "domain になる", gmail_stats, last_sync_at is not null 
 insert into public.mails (workspace_id, company_id, direction, subject, sent_at,
                           gmail_message_id, gmail_thread_id, rfc_message_id, imported_by)
 values (:'ws', :'co', 'in', 'お見積のご依頼', now(), 'g-haru-1', 't-haru', 'abc@client.example', :'haru')
-on conflict (workspace_id, rfc_message_id) do nothing;
+on conflict (workspace_id, dedupe_key, rfc_message_id) do nothing;
 insert into public.mails (workspace_id, company_id, direction, subject, sent_at,
                           gmail_message_id, gmail_thread_id, rfc_message_id, imported_by)
 values (:'ws', :'co', 'in', 'お見積のご依頼', now(), 'g-haru-1', 't-haru', 'abc@client.example', :'haru')
-on conflict (workspace_id, rfc_message_id) do nothing;
+on conflict (workspace_id, dedupe_key, rfc_message_id) do nothing;
 select count(*) as "1が正しい" from public.mails where rfc_message_id = 'abc@client.example';
 
 \echo ''
@@ -41,6 +41,9 @@ select count(*) as "1が正しい" from public.mails where rfc_message_id = 'abc
 insert into public.mails (workspace_id, company_id, direction, subject, sent_at)
 values (:'ws', :'co', 'out', '手入力1', now()), (:'ws', :'co', 'out', '手入力2', now());
 select count(*) as "2が正しい" from public.mails where subject like '手入力%';
+
+-- ── はるが会社をチームに共有する（023 からは、共有しないと他の人には見えない）──
+update public.companies set shared = true where id = :'co';
 
 -- ── 同じワークスペースのひら社員として ──
 reset role;
@@ -54,13 +57,23 @@ select id as staff from public.workspace_members where workspace_id = :'ws' and 
 insert into public.mails (workspace_id, company_id, direction, subject, sent_at,
                           gmail_message_id, gmail_thread_id, rfc_message_id, imported_by)
 values (:'ws', :'co', 'in', 'お見積のご依頼', now(), 'g-staff-9', 't-staff', 'abc@client.example', :'staff')
-on conflict (workspace_id, rfc_message_id) do nothing;
+on conflict (workspace_id, dedupe_key, rfc_message_id) do nothing;
 select count(*) as "1のまま", min(gmail_message_id) as "はるの取り込みが残る"
   from public.mails where rfc_message_id = 'abc@client.example';
 
 \echo ''
-\echo '── ⑤ 取り込んだメールはチームの全員に見える ──'
+\echo '── ⑤ 共有した会社のメールはチームの全員に見える ──'
 select count(*) as "ひら社員から見える（3が正しい）" from public.mails where workspace_id = :'ws';
+
+\echo ''
+\echo '── ⑤-2 ひら社員が自分で同じ相手を別に登録していたら、そちらにも入る（1社に1件）──'
+select (public.register_contact(:'ws', '株式会社ひらの取引先', p_contact_name => '担当の人', p_email => 'buyer@client.example'))->>'company_id' as staff_co \gset
+insert into public.mails (workspace_id, company_id, direction, subject, sent_at,
+                          gmail_message_id, gmail_thread_id, rfc_message_id, imported_by)
+values (:'ws', :'staff_co', 'in', 'お見積のご依頼', now(), 'g-staff-9b', 't-staff', 'abc@client.example', :'staff')
+on conflict (workspace_id, dedupe_key, rfc_message_id) do nothing;
+select count(*) as "2になる（共有の会社に1件・自分の会社に1件）"
+  from public.mails where rfc_message_id = 'abc@client.example';
 
 \echo ''
 \echo '── ⑥ ひら社員が範囲を変えても、はるの設定は変わらない ──'
@@ -72,10 +85,10 @@ select count(*) as "ひら社員の連携（0が正しい）" from public.integr
 \echo '── ⑦ タスクにしたメールは、タスクを消すと印も外れる ──'
 insert into public.tasks (workspace_id, company_id, title, assignee_id)
 values (:'ws', :'co', '返信：お見積のご依頼', :'staff') returning id as task \gset
-update public.mails set task_id = :'task' where rfc_message_id = 'abc@client.example';
-select task_id is not null as "印がつく" from public.mails where rfc_message_id = 'abc@client.example';
+update public.mails set task_id = :'task' where rfc_message_id = 'abc@client.example' and company_id = :'co';
+select task_id is not null as "印がつく" from public.mails where rfc_message_id = 'abc@client.example' and company_id = :'co';
 delete from public.tasks where id = :'task';
-select task_id is null as "印が外れる" from public.mails where rfc_message_id = 'abc@client.example';
+select task_id is null as "印が外れる" from public.mails where rfc_message_id = 'abc@client.example' and company_id = :'co';
 
 -- ── はるに戻る ──
 reset role;
@@ -85,6 +98,9 @@ set role authenticated;
 \echo ''
 \echo '── ⑧ はるの範囲と結果は、ひら社員に上書きされていない ──'
 select gmail_scope as "domain のまま", gmail_stats->>'imported' as "2のまま" from public.integration_status();
+\echo ''
+\echo '── ⑧-2 ひら社員が自分の会社に取り込んだメールは、はるには見えない ──'
+select count(*) as "1が正しい（共有の会社のぶんだけ）" from public.mails where rfc_message_id = 'abc@client.example';
 
 -- ── 別の会社の人として ──
 reset role;

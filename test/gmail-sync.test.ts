@@ -43,9 +43,11 @@ class Query {
   run(): { data: Row[] | null; error: null } {
     const t = db[this.table];
     if (this.op === "upsert") {
-      // on conflict (workspace_id, rfc_message_id) do nothing
+      // on conflict (workspace_id, dedupe_key, rfc_message_id) do nothing
+      // dedupe_key = coalesce(company_id, imported_by)（023：同じメールは会社ごとに1件）
+      const key = (x: Row) => x.company_id ?? x.imported_by;
       for (const r of this.rows) {
-        if (t.some((x) => x.workspace_id === r.workspace_id && x.rfc_message_id === r.rfc_message_id)) continue;
+        if (t.some((x) => x.workspace_id === r.workspace_id && key(x) === key(r) && x.rfc_message_id === r.rfc_message_id)) continue;
         t.push({ id: `m${t.length + 1}`, ...r });
       }
       return { data: null, error: null };
@@ -63,10 +65,21 @@ class Query {
   }
 }
 
+/** 取り込む人から見た「自分の会社」（自分が登録・担当・共有された）と「見える会社」 */
+let mine = new Set(["co1"]);
+let visible = new Set(["co1"]);
+
 const supabase = {
   from: (table: string) => new Query(table),
-  rpc: async (name: string, args: { p_stats?: unknown }) => {
+  rpc: async (name: string, args: { p_stats?: unknown; p_workspace_id?: string }) => {
     rpcCalls.push([name, args]);
+    if (name === "my_mail_contacts") {
+      const rows = db.contacts.filter(
+        (c) => c.workspace_id === args.p_workspace_id && c.archived_at === null && c.email && mine.has(String(c.company_id))
+      );
+      return { data: rows.map((c) => ({ ...c })), error: null };
+    }
+    if (name === "my_visible_company_ids") return { data: [...visible], error: null };
     return { data: null, error: null };
   },
 } as never;
@@ -187,6 +200,41 @@ test("同じメールを別のメンバーが取り込んでも増えない", as
   assert.ok("ok" in r, JSON.stringify(r));
   assert.equal(r.stats.imported, 0);
   assert.equal(mails().length, before);
+});
+
+test("人の会社（共有されていない）の名刺とは照らし合わせない", async () => {
+  // 隣の人が自分だけで登録した相手。こちらの「自分の会社」には入っていない
+  db.contacts.push({ id: "ct-x", email: "hanako@secret-client.co.jp", company_id: "co-x", mail_watch: true, workspace_id: WS, archived_at: null });
+  addMsg("tx", "hanako@secret-client.co.jp", "me@nico-inc.net", ["INBOX"], Date.now() + 1500, "secret");
+  queries.length = 0;
+  const r = await sync();
+  assert.ok("ok" in r, JSON.stringify(r));
+  assert.ok(queries.every((q) => !q.includes("hanako@secret-client.co.jp")), queries.join("\n"));
+  assert.equal(mails().filter((m) => m.rfc_message_id === "secret@x").length, 0);
+});
+
+test("同じ相手を別の人が自分で登録していたら、その人の会社にも1件入る", async () => {
+  // けんは taro を自分の会社（co-ken）に登録している。co1 は見えない
+  db.contacts.push({ id: "ct-ken", email: "taro@client.co.jp", company_id: "co-ken", mail_watch: true, workspace_id: WS, archived_at: null });
+  const savedMine = mine;
+  const savedVisible = visible;
+  mine = new Set(["co-ken"]);
+  visible = new Set(["co-ken"]);
+  try {
+    const ken: ConnectedGmail = { ...state, email: "ken@nico-inc.net", lastSyncAt: null, stats: null };
+    const r = await runGmailSync(supabase, ken, { ...me, memberId: "mem-ken" });
+    assert.ok("ok" in r, JSON.stringify(r));
+    const copies = mails().filter((m) => m.rfc_message_id === "first@x");
+    assert.deepEqual(copies.map((m) => m.company_id).sort(), ["co-ken", "co1"]);
+    // 2回取り込んでも、けんの会社のぶんは増えない
+    const again = await runGmailSync(supabase, ken, { ...me, memberId: "mem-ken" });
+    assert.ok("ok" in again, JSON.stringify(again));
+    assert.equal(again.stats.imported, 0);
+  } finally {
+    mine = savedMine;
+    visible = savedVisible;
+    db.contacts.splice(db.contacts.findIndex((c) => c.id === "ct-ken"), 1);
+  }
 });
 
 test("あとから返信したら、未返信だったメールが返信済みになる", async () => {

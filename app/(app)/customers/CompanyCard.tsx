@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Users } from "lucide-react";
 import { C, SOFT, DEAL_STATUS } from "@/lib/design";
 import { CompanyAvatar, TierChip, DealChip } from "@/components/ui";
 import type { CompanyRow } from "@/lib/customers";
@@ -36,7 +36,21 @@ export function CompanyCard({ company, index }: { company: CompanyRow; index: nu
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-base font-extrabold truncate">{company.name}</span>
             {company.tier && <TierChip tier={company.tier as Tier} small />}
+            {company.shared && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] font-extrabold px-1.5 py-0.5"
+                style={{ background: SOFT.green, color: C.green, borderRadius: "6px 10px 6px 10px" }}
+              >
+                <Users size={10} strokeWidth={3} />
+                共有
+              </span>
+            )}
           </div>
+          {company.is_mine === false && (
+            <div className="text-[10px] font-bold mt-0.5" style={{ color: C.green }}>
+              {company.registrant_name ? `${company.registrant_name}さん` : "ほかの人"}の登録
+            </div>
+          )}
 
           <div className="text-xs font-bold mt-0.5 truncate" style={{ color: "#9AA0A6" }}>
             {company.primary_contact_name

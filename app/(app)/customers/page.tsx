@@ -1,15 +1,16 @@
 import Link from "next/link";
-import { Mail, Plus, Settings } from "lucide-react";
+import { Mail, Plus, Search, Settings } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { OrganicButton } from "@/components/ui";
 import { hasFilter, isSortKey, type CustomerQuery } from "@/lib/customers";
-import { loadCustomers } from "@/lib/customers.server";
+import { loadCompanyGroups, loadCustomers } from "@/lib/customers.server";
 import { createClient } from "@/lib/supabase/server";
 import { CustomerControls } from "./CustomerControls";
 import { CompanyCard } from "./CompanyCard";
+import { GroupCard } from "./GroupCard";
 import { DealList, type DealRow, type Owner } from "./DealList";
 import {
   KeyPersons, type ContactOption, type KeyFacet, type KeyPersonRow, type Referral,
@@ -33,6 +34,8 @@ type Params = {
   industry?: string;
   deal?: string;
   sort?: string;
+  /** all＝全社のまとめ（「全員の名刺を見る」許可がある人だけ） */
+  view?: string;
 };
 
 export default async function CustomersPage({
@@ -52,7 +55,16 @@ export default async function CustomersPage({
     sort: isSortKey(params.sort) ? params.sort : "new",
   };
 
-  const { companies, counts, facets, error } = await loadCustomers(current.workspace.id, query);
+  // 全社のまとめは、許可がある人だけ（023）。無い人が ?view=all を開いても、自分の一覧を出す
+  const canViewAll = Boolean(current.member.can_view_all);
+  const viewAll = canViewAll && params.view === "all" && tab === "company";
+
+  const [{ companies, counts, facets, error }, groupsRes] = await Promise.all([
+    loadCustomers(current.workspace.id, query),
+    viewAll
+      ? loadCompanyGroups(current.workspace.id, { q: params.q, tier: params.tier })
+      : Promise.resolve({ groups: [], error: null }),
+  ]);
 
   // 進行中とキーパーソンは、そのタブを開いたときだけ引く
   const supabase = await createClient();
@@ -209,7 +221,85 @@ export default async function CustomersPage({
           })}
         </div>
 
-        {tab === "company" && (
+        {tab === "company" && canViewAll && (
+          <div className="flex items-center gap-1.5">
+            {[
+              { key: "mine", label: "自分の", href: "/customers" },
+              { key: "all", label: "全社（全員の登録）", href: "/customers?view=all" },
+            ].map((v) => {
+              const on = (viewAll ? "all" : "mine") === v.key;
+              return (
+                <Link
+                  key={v.key}
+                  href={v.href}
+                  className="text-xs font-extrabold px-3 py-1.5"
+                  style={{
+                    background: on ? C.ink : "#fff",
+                    color: on ? "#fff" : "#6B6B6B",
+                    border: `2px solid ${on ? C.ink : C.line}`,
+                    borderRadius: "12px 6px 12px 6px",
+                  }}
+                >
+                  {v.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {viewAll && (
+          <>
+            <form action="/customers" className="flex gap-2">
+              <input type="hidden" name="view" value="all" />
+              <input
+                name="q"
+                defaultValue={params.q ?? ""}
+                placeholder="会社名・名刺の名前・メールで探す"
+                className="flex-1 min-w-0 px-3.5 py-2.5 text-sm font-bold outline-none bg-white"
+                style={{ border: `2px solid ${C.line}`, borderRadius: "18px 9px 18px 9px" }}
+              />
+              <button
+                type="submit"
+                aria-label="探す"
+                className="w-11 shrink-0 flex items-center justify-center"
+                style={{ background: C.purple, borderRadius: "14px 7px 14px 7px" }}
+              >
+                <Search size={16} strokeWidth={2.8} className="text-white" />
+              </button>
+            </form>
+            <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: "#9AA0A6" }}>
+              全員が登録した名刺を、会社ごとに1つにまとめています。見るだけで、人の会社は書き換えられません。
+            </p>
+            {groupsRes.error && (
+              <p className="text-xs font-bold px-1" style={{ color: C.red }} role="alert">
+                {groupsRes.error}
+              </p>
+            )}
+            {groupsRes.groups.length > 0 ? (
+              <div className="space-y-2.5">
+                <p className="text-xs font-bold px-1" style={{ color: "#9AA0A6" }}>
+                  {groupsRes.groups.length}社
+                  {groupsRes.groups.some((g) => g.record_count > 1) &&
+                    `（うち ${groupsRes.groups.filter((g) => g.record_count > 1).length}社は何人かが登録）`}
+                </p>
+                {groupsRes.groups.map((group, i) => (
+                  <GroupCard key={group.key} group={group} index={i} />
+                ))}
+              </div>
+            ) : (
+              !groupsRes.error && (
+                <EmptyState
+                  shape="cloud"
+                  color="blue"
+                  title={params.q ? "見つかりませんでした" : "まだ誰も登録していません"}
+                  desc={params.q ? "言葉を変えて探してみてください。" : "名刺を登録すると、ここに全員のぶんが集まります。"}
+                />
+              )
+            )}
+          </>
+        )}
+
+        {tab === "company" && !viewAll && (
           <>
             <CustomerControls facets={facets} />
 

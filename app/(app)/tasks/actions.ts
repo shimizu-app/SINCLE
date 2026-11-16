@@ -39,7 +39,7 @@ export async function saveTask(_prev: ActionResult, form: FormData): Promise<Act
   const assigneeId = str(form, "assigneeId") ?? current.member.id;
 
   // 会社を選ばず、自分が担当なら「自分だけのTODO」にする。
-  // tasks はワークスペースの全員から見えるが、personal_todos は本人にしか見えない。
+  // tasks はその会社が見える人と担当者から見える（023）が、personal_todos は本人にしか見えない。
   // 「歯医者」のような私用の予定まで、チームに見せないようにするため。
   if (!id && !companyId && assigneeId === current.member.id) {
     const { error } = await supabase.from("personal_todos").insert({

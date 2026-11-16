@@ -10,6 +10,7 @@ import { gmailSendState } from "@/lib/gmail-send";
 import { slotLabel } from "@/lib/slots";
 import { composeSource } from "./context";
 import { ComposeClient } from "./ComposeClient";
+import { mineFilter } from "@/lib/customers";
 
 // AI の下書きと Gmail での送信を、この画面から呼ぶ
 export const maxDuration = 60;
@@ -30,6 +31,7 @@ export default async function ComposePage({ searchParams }: { searchParams: Prom
       .select("id, name")
       .eq("workspace_id", current.workspace.id)
       .is("archived_at", null)
+      .or(mineFilter(current.member.id))
       .order("name")
       .limit(300);
     return (

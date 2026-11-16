@@ -287,7 +287,9 @@ export type Database = {
           name_normalized: string
           owner_id: string | null
           primary_contact_id: string | null
+          registered_by: string | null
           revenue: string | null
+          shared: boolean
           stage_id: string | null
           tags: string[]
           tier: string | null
@@ -309,7 +311,9 @@ export type Database = {
           name_normalized?: string
           owner_id?: string | null
           primary_contact_id?: string | null
+          registered_by?: string | null
           revenue?: string | null
+          shared?: boolean
           stage_id?: string | null
           tags?: string[]
           tier?: string | null
@@ -331,7 +335,9 @@ export type Database = {
           name_normalized?: string
           owner_id?: string | null
           primary_contact_id?: string | null
+          registered_by?: string | null
           revenue?: string | null
+          shared?: boolean
           stage_id?: string | null
           tags?: string[]
           tier?: string | null
@@ -344,6 +350,13 @@ export type Database = {
           {
             foreignKeyName: "companies_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_registered_by_fkey"
+            columns: ["registered_by"]
             isOneToOne: false
             referencedRelation: "workspace_members"
             referencedColumns: ["id"]
@@ -937,6 +950,7 @@ export type Database = {
           company_id: string | null
           contact_id: string | null
           created_at: string
+          dedupe_key: string | null
           direction: string
           excerpt: string | null
           from_email: string | null
@@ -957,6 +971,7 @@ export type Database = {
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
+          dedupe_key?: never
           direction: string
           excerpt?: string | null
           from_email?: string | null
@@ -977,6 +992,7 @@ export type Database = {
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
+          dedupe_key?: never
           direction?: string
           excerpt?: string | null
           from_email?: string | null
@@ -1380,6 +1396,7 @@ export type Database = {
       workspace_members: {
         Row: {
           avatar: Json
+          can_view_all: boolean
           cover: Json | null
           created_at: string
           email: string
@@ -1397,6 +1414,7 @@ export type Database = {
         }
         Insert: {
           avatar?: Json
+          can_view_all?: boolean
           cover?: Json | null
           created_at?: string
           email: string
@@ -1414,6 +1432,7 @@ export type Database = {
         }
         Update: {
           avatar?: Json
+          can_view_all?: boolean
           cover?: Json | null
           created_at?: string
           email?: string
@@ -1611,6 +1630,58 @@ export type Database = {
         }
         Returns: string
       }
+      company_group: {
+        Args: { p_key: string; p_workspace_id: string }
+        Returns: {
+          id: string
+          name: string
+          industry: string | null
+          tier: string | null
+          shared: boolean
+          created_at: string
+          updated_at: string
+          registered_by: string | null
+          registrant_name: string | null
+          registrant_avatar: Json | null
+          owner_name: string | null
+          stage_name: string | null
+          contact_count: number
+          open_task_count: number
+          deal_status: string | null
+          deal_updated_at: string | null
+        }[]
+      }
+      company_group_contacts: {
+        Args: { p_key: string; p_workspace_id: string }
+        Returns: {
+          id: string
+          company_id: string
+          name: string
+          dept: string | null
+          title: string | null
+          email: string | null
+          phone: string | null
+          created_at: string
+          registrant_name: string | null
+        }[]
+      }
+      company_groups: {
+        Args: { p_limit?: number; p_q?: string; p_tier?: string; p_workspace_id: string }
+        Returns: {
+          key: string
+          name: string
+          record_count: number
+          registrants: string[]
+          contact_count: number
+          tier: string | null
+          industry: string | null
+          shared: boolean
+          active_deals: number
+          open_task_count: number
+          latest_at: string
+          company_ids: string[]
+        }[]
+      }
       customer_counts: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -1777,6 +1848,7 @@ export type Database = {
           open_task_count: number
           role: string
           status: string
+          can_view_all: boolean
         }[]
       }
       list_tasks: {
@@ -1830,8 +1902,18 @@ export type Database = {
           scopes: string[]
         }[]
       }
+      my_mail_contacts: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          id: string
+          email: string | null
+          company_id: string
+          mail_watch: boolean
+        }[]
+      }
       my_member_id: { Args: { ws: string }; Returns: string }
       my_member_ids: { Args: never; Returns: string[] }
+      my_visible_company_ids: { Args: never; Returns: string[] }
       my_workspace_ids: { Args: never; Returns: string[] }
       normalize_company_name: { Args: { p_name: string }; Returns: string }
       open_dm: {
@@ -1896,6 +1978,7 @@ export type Database = {
           p_industry?: string
           p_limit?: number
           p_q?: string
+          p_scope?: string
           p_sort?: string
           p_tier?: string
           p_workspace_id: string
@@ -1920,6 +2003,10 @@ export type Database = {
           tags: string[]
           tier: string
           updated_at: string
+          shared: boolean
+          registered_by: string | null
+          registrant_name: string | null
+          is_mine: boolean
         }[]
       }
       set_gmail_scope: {

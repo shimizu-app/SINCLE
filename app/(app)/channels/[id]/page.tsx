@@ -15,14 +15,25 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
 
   const { data: channel } = await supabase
     .from("channels")
-    .select("*, companies(name, industry)")
+    .select("*, companies(name, industry, shared, registered_by, owner_id)")
     .eq("id", id)
     .eq("workspace_id", current.workspace.id)
     .maybeSingle();
 
   if (!channel) notFound();
 
-  const company = channel.companies as { name: string; industry: string | null } | null;
+  const company = channel.companies as {
+    name: string;
+    industry: string | null;
+    shared: boolean;
+    registered_by: string | null;
+    owner_id: string | null;
+  } | null;
+  // 「全員の名刺を見る」許可で人の会社のチャンネルを開いたときは、読むだけ（023）
+  const me = current.member.id;
+  const readOnly =
+    channel.kind === "company" &&
+    !(company?.shared || company?.registered_by === me || company?.owner_id === me);
   const title = channel.kind === "company" ? company?.name ?? "会社" : channel.name ?? "グループ";
 
   const [{ data: rows }, { data: people }] = await Promise.all([
@@ -98,6 +109,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
         initial={messages}
         myMemberId={current.member.id}
         people={peopleMap}
+        readOnly={readOnly}
       />
     </>
   );

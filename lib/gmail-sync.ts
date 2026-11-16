@@ -134,17 +134,20 @@ export async function runGmailSync(
   input: { workspaceId: string; memberId: string; workspaceDomain: string | null }
 ): Promise<SyncResult> {
   const { workspaceId, memberId } = input;
-  const [{ data: contacts, error: contactError }, { data: members }] = await Promise.all([
-    supabase
-      .from("contacts")
-      .select("id, email, company_id, mail_watch")
-      .eq("workspace_id", workspaceId)
-      .is("archived_at", null)
-      .not("email", "is", null)
-      .limit(5000),
+  // 照らし合わせるのは「自分の会社」（自分が登録・担当・共有された）の名刺だけ。
+  // 「全員の名刺を見る」許可があっても、人の顧客とのメールを人の会社に入れない（023）
+  const [{ data: contacts, error: contactError }, { data: members }, { data: visible }] = await Promise.all([
+    supabase.rpc("my_mail_contacts", { p_workspace_id: workspaceId }),
     supabase.from("workspace_members").select("email").eq("workspace_id", workspaceId),
+    supabase.rpc("my_visible_company_ids"),
   ]);
-  if (contactError) return { error: contactError.message };
+  if (contactError) {
+    if (/my_mail_contacts|function/i.test(contactError.message)) {
+      return { error: "データベースの更新（023）がまだです。" };
+    }
+    return { error: contactError.message };
+  }
+  const visibleCompanies = new Set((visible ?? []) as string[]);
 
   // 社内のアドレス。メンバー本人たちと、連携した Google アカウント、ワークスペースのドメイン
   const internal = new Set(
@@ -227,16 +230,26 @@ export async function runGmailSync(
       const r = threadToRows(messages, ctx);
       ads += r.ads;
       skipped += r.skipped;
-      for (const row of r.rows) if (!byRfc.has(row.rfc_message_id)) byRfc.set(row.rfc_message_id, row);
+      for (const row of r.rows) {
+        // 前に取り込んだスレッドの会社が、共有を外されるなどで見えなくなっていたら入れない
+        if (row.company_id && !visibleCompanies.has(row.company_id)) {
+          skipped++;
+          continue;
+        }
+        if (!byRfc.has(row.rfc_message_id)) byRfc.set(row.rfc_message_id, row);
+      }
     }
     const rows = [...byRfc.values()];
 
-    // ③ 保存。すでにある（ほかのメンバーが取り込んだ）ものは入れ直さず、返信済みだけ追いつかせる
+    // ③ 保存。同じメールは「会社ごとに1件」（会社が無ければ取り込んだ人ごと）。023
+    //    すでにある（ほかのメンバーが同じ会社に取り込んだ）ものは入れ直さず、返信済みだけ追いつかせる
+    const keyOf = (companyId: string | null, importedBy: string | null, rfc: string) =>
+      `${companyId ?? importedBy ?? ""}|${rfc}`;
     const existing = new Map<string, { id: string; replied: boolean }>();
     for (const part of chunks(rows.map((r) => r.rfc_message_id), 40)) {
       const { data, error } = await supabase
         .from("mails")
-        .select("id, rfc_message_id, replied")
+        .select("id, rfc_message_id, replied, company_id, imported_by")
         .eq("workspace_id", workspaceId)
         .in("rfc_message_id", part);
       if (error) {
@@ -245,21 +258,28 @@ export async function runGmailSync(
         }
         return { error: error.message };
       }
-      for (const m of data ?? []) existing.set(m.rfc_message_id as string, { id: m.id, replied: m.replied });
+      for (const m of data ?? []) {
+        const hit = { id: m.id, replied: m.replied };
+        existing.set(keyOf(m.company_id, m.imported_by, m.rfc_message_id as string), hit);
+        // 自分が前に取り込んだもの（会社の付け替えがあっても）は二重に入れない
+        if (m.imported_by === memberId) existing.set(`me|${m.rfc_message_id}`, hit);
+      }
     }
+    const already = (r: MailRow) =>
+      existing.get(keyOf(r.company_id, memberId, r.rfc_message_id)) ?? existing.get(`me|${r.rfc_message_id}`);
 
-    const fresh = rows.filter((r) => !existing.has(r.rfc_message_id));
+    const fresh = rows.filter((r) => !already(r));
     for (const part of chunks(fresh, 50)) {
       const { error } = await supabase.from("mails").upsert(
         part.map((r) => ({ ...r, workspace_id: workspaceId, imported_by: memberId })),
-        { onConflict: "workspace_id,rfc_message_id", ignoreDuplicates: true }
+        { onConflict: "workspace_id,dedupe_key,rfc_message_id", ignoreDuplicates: true }
       );
       if (error) return { error: error.message };
     }
 
     const nowReplied = rows
-      .filter((r) => r.replied && existing.get(r.rfc_message_id)?.replied === false)
-      .map((r) => existing.get(r.rfc_message_id)!.id);
+      .filter((r) => r.replied && already(r)?.replied === false)
+      .map((r) => already(r)!.id);
     for (const part of chunks(nowReplied, 100)) {
       await supabase.from("mails").update({ replied: true }).in("id", part).eq("workspace_id", workspaceId);
     }

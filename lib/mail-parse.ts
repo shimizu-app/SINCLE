@@ -29,7 +29,7 @@ export const GMAIL_SCOPES: { key: GmailScope; label: string; desc: string }[] = 
   {
     key: "all",
     label: "受信箱すべて",
-    desc: "広告・お知らせ以外の受信箱のメールを入れます。チームの全員に見えるので注意してください",
+    desc: "広告・お知らせ以外の受信箱のメールを入れます。会社に結びつかないメールは、あなたにだけ見えます",
   },
 ];
 

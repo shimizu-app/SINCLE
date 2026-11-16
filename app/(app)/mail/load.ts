@@ -31,7 +31,7 @@ type Row = {
 
 /**
  * メールの一覧。本文は載せない（開いたときに getMailBody で取る）。
- * 取り込んだメールはワークスペースの全員に見える（005 / 014 の RLS）。
+ * 見えるのは、自分が取り込んだ・送ったメールと、見える会社のメール（023 の RLS）。
  */
 export async function loadMails(
   workspaceId: string,

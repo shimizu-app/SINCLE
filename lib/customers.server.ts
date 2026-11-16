@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { CompanyRow, Counts, CustomerQuery, Facet } from "./customers";
+import type { CompanyGroupRow, CompanyRow, Counts, CustomerQuery, Facet } from "./customers";
 
 /* ══════════════ 取得 ══════════════ */
 
@@ -35,3 +35,17 @@ export async function loadCustomers(workspaceId: string, query: CustomerQuery) {
   };
 }
 
+
+/** 全社のまとめ（「全員の名刺を見る」許可がある人だけ。無ければ空） */
+export async function loadCompanyGroups(workspaceId: string, query: { q?: string; tier?: string }) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("company_groups", {
+    p_workspace_id: workspaceId,
+    p_q: query.q || undefined,
+    p_tier: query.tier || undefined,
+  });
+  return {
+    groups: (data ?? []) as unknown as CompanyGroupRow[],
+    error: error ? (/company_groups|function/i.test(error.message) ? "データベースの更新（023）がまだです。" : error.message) : null,
+  };
+}

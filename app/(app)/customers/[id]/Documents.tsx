@@ -29,7 +29,16 @@ function size(bytes: number | null) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
-export function Documents({ companyId, docs }: { companyId: string; docs: DocRow[] }) {
+export function Documents({
+  companyId,
+  docs,
+  readOnly = false,
+}: {
+  companyId: string;
+  docs: DocRow[];
+  /** 「全員の名刺を見る」で人の会社を見ているとき。開けるが、置く・消すはできない */
+  readOnly?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<DocKind | null>(null);
   const [state, action, pending] = useActionState<DocResult, FormData>(uploadDocument, undefined);
@@ -78,7 +87,7 @@ export function Documents({ companyId, docs }: { companyId: string; docs: DocRow
             よく使う
           </div>
           {pinned.map((doc, i) => (
-            <DocCard key={doc.id} doc={doc} index={i} onOpen={openFile} start={start} />
+            <DocCard key={doc.id} doc={doc} index={i} onOpen={openFile} start={start} readOnly={readOnly} />
           ))}
         </div>
       )}
@@ -89,14 +98,16 @@ export function Documents({ companyId, docs }: { companyId: string; docs: DocRow
         </p>
       ) : (
         rest.map((doc, i) => (
-          <DocCard key={doc.id} doc={doc} index={i} onOpen={openFile} start={start} />
+          <DocCard key={doc.id} doc={doc} index={i} onOpen={openFile} start={start} readOnly={readOnly} />
         ))
       )}
 
-      <OrganicButton type="button" size="lg" color="blue" className="w-full" onClick={() => setOpen(true)}>
-        <Plus size={16} strokeWidth={3} />
-        書類をあげる
-      </OrganicButton>
+      {!readOnly && (
+        <OrganicButton type="button" size="lg" color="blue" className="w-full" onClick={() => setOpen(true)}>
+          <Plus size={16} strokeWidth={3} />
+          書類をあげる
+        </OrganicButton>
+      )}
 
       <Sheet open={open} onClose={() => setOpen(false)} title="書類" subtitle="種類を決めて置いておけます">
         <form action={action} className="space-y-3">
@@ -141,12 +152,13 @@ export function Documents({ companyId, docs }: { companyId: string; docs: DocRow
 }
 
 function DocCard({
-  doc, index, onOpen, start,
+  doc, index, onOpen, start, readOnly,
 }: {
   doc: DocRow;
   index: number;
   onOpen: (id: string) => void;
   start: (fn: () => void) => void;
+  readOnly: boolean;
 }) {
   const look = DOC_KIND[doc.kind] ?? DOC_KIND.other;
   return (
@@ -179,6 +191,7 @@ function DocCard({
             <Download size={12} strokeWidth={2.5} />
             開く
           </button>
+          {!readOnly && (<>
           <button
             type="button"
             onClick={() => start(() => void updateDocument(doc.id, { pinned: !doc.pinned }))}
@@ -196,6 +209,7 @@ function DocCard({
           >
             <Trash2 size={13} strokeWidth={2.5} style={{ color: "#C8C2B6" }} />
           </button>
+          </>)}
         </div>
       </div>
     </div>

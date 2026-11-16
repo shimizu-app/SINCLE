@@ -71,8 +71,8 @@ export function GmailConnect({ state }: { state: NotConnected }) {
 
       <p className="text-[11px] font-bold leading-relaxed" style={{ color: "#9AA0A6" }}>
         読み取りだけで、Google 側のメールを送ったり消したりはしません。
-        取り込んだメールは<span style={{ color: C.ink }}>チームのメンバー全員に見えます</span>
-        （会社ごとの履歴に残すため）。同じ連携で Google カレンダーもつながります。
+        取り込んだメールは、<span style={{ color: C.ink }}>その会社が見える人にだけ</span>見えます
+        （自分だけの会社なら自分だけ。チームに共有した会社なら全員）。同じ連携で Google カレンダーもつながります。
       </p>
     </div>
   );

@@ -15,6 +15,7 @@ import { Timeline, type TimelineItem } from "./Timeline";
 import { Documents, type DocRow } from "./Documents";
 import { CompanyTasks } from "./CompanyTasks";
 import { CompanyProgress } from "./CompanyProgress";
+import { CompanySharing } from "./CompanySharing";
 import { MessageStream, type StreamMessage } from "../../channels/MessageStream";
 import type { Subtask, TaskRow } from "../../tasks/TaskList";
 import { MailList } from "../../mail/MailList";
@@ -54,6 +55,17 @@ export default async function CompanyPage({
     .maybeSingle();
 
   if (!company) notFound();
+
+  // 見える範囲（023）。自分の会社＝自分が登録した・担当している・共有された。
+  // それ以外が見えているのは「全員の名刺を見る」許可で見ているとき。見るだけにする
+  const me = current.member.id;
+  const registeredByMe = company.registered_by === me;
+  const mine = registeredByMe || company.owner_id === me || company.shared;
+  const readOnly = !mine;
+  const canShare = registeredByMe || company.owner_id === me || (current.member.is_admin && mine);
+  const { data: registrant } = company.registered_by && !registeredByMe
+    ? await supabase.from("workspace_members").select("name").eq("id", company.registered_by).maybeSingle()
+    : { data: null };
 
   const [{ data: contacts }, { data: stages }, { data: deal }, { count: openTasks }] =
     await Promise.all([
@@ -273,6 +285,17 @@ export default async function CompanyPage({
       </nav>
 
       <div className="px-4 py-4 space-y-4">
+        <CompanySharing
+          companyId={id}
+          shared={company.shared}
+          registrantName={registrant?.name ?? null}
+          registeredByMe={registeredByMe}
+          canShare={canShare}
+          readOnly={readOnly}
+        />
+
+        {/* 人の会社を見ているときは、書き換えのボタンや入力をまとめて止める */}
+        <fieldset disabled={readOnly} className="contents">
         {tab.key === "overview" && (
           <CompanyOverview
             company={company}
@@ -292,6 +315,7 @@ export default async function CompanyPage({
             primaryContactId={company.primary_contact_id}
           />
         )}
+        </fieldset>
 
         {tab.key === "timeline" && (
           <Timeline
@@ -301,14 +325,16 @@ export default async function CompanyPage({
             hasMore={hasMore}
             myName={current.member.name}
             myAvatar={current.member.avatar}
+            readOnly={readOnly}
           />
         )}
 
         {tab.key === "documents" && (
-          <Documents companyId={id} docs={(docs ?? []) as unknown as DocRow[]} />
+          <Documents companyId={id} docs={(docs ?? []) as unknown as DocRow[]} readOnly={readOnly} />
         )}
 
         {tab.key === "tasks" && (
+          <fieldset disabled={readOnly} className="contents">
           <CompanyTasks
             companyId={id}
             companyName={company.name}
@@ -320,20 +346,25 @@ export default async function CompanyPage({
             members={membersRes.data ?? []}
             myMemberId={current.member.id}
           />
+          </fieldset>
         )}
 
         {tab.key === "mail" && (
           <>
-            <Link
-              href={`/mail/compose?company=${id}`}
-              className="flex items-center justify-center gap-1.5 text-sm font-extrabold py-3 text-white"
-              style={{ background: C.purple, borderRadius: "22px 11px 22px 11px" }}
-            >
-              AIで下書きしてメールを作成
-            </Link>
+            {!readOnly && (
+              <Link
+                href={`/mail/compose?company=${id}`}
+                className="flex items-center justify-center gap-1.5 text-sm font-extrabold py-3 text-white"
+                style={{ background: C.purple, borderRadius: "22px 11px 22px 11px" }}
+              >
+                AIで下書きしてメールを作成
+              </Link>
+            )}
             <div className="flex items-center gap-2">
               <p className="flex-1 text-[11px] font-bold leading-relaxed" style={{ color: "#9AA0A6" }}>
-                この会社の人とのやりとり。チームのメンバーが Gmail から取り込んだものです。
+                {company.shared
+                  ? "この会社の人とのやりとり。チームのメンバーが Gmail から取り込んだものです。"
+                  : "この会社の人とのやりとり。Gmail から取り込んだものです。"}
               </p>
               <Link
                 href="/mail"
@@ -421,6 +452,7 @@ export default async function CompanyPage({
             myMemberId={current.member.id}
             people={peopleMap}
             placeholder={`${company.name} について`}
+            readOnly={readOnly}
           />
         ) : (
           <div className="px-4 pb-4">

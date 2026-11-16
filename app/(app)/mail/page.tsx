@@ -157,7 +157,7 @@ export default async function MailPage({
         )}
 
         <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: "#9AA0A6" }}>
-          ここに並ぶのは、チームのメンバーが Gmail から取り込んだメールと、SYNCLE から送ったメールです（全員に見えます）。
+          ここに並ぶのは、あなたが Gmail から取り込んだメールと、見える会社（自分の・共有された）のメール、SYNCLE から送ったメールです。
         </p>
       </div>
     </>

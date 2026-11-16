@@ -44,6 +44,7 @@ export function Timeline({
   hasMore,
   myName,
   myAvatar,
+  readOnly = false,
 }: {
   companyId: string;
   items: TimelineItem[];
@@ -51,6 +52,8 @@ export function Timeline({
   hasMore: boolean;
   myName: string;
   myAvatar: Avatar | null;
+  /** 人の会社を見ているとき。記録の入力欄を出さない */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -98,6 +101,7 @@ export function Timeline({
   return (
     <div className="space-y-3">
       {/* ── 記録の入力欄 ── */}
+      {!readOnly && (
       <div
         className="bg-white p-3 space-y-2"
         style={{ borderRadius: "26px 13px 26px 13px", border: `2.5px solid ${C.green}` }}
@@ -135,6 +139,7 @@ export function Timeline({
           チャンネルにも流れます。書くと案件の「最終更新」が今になります。
         </p>
       </div>
+      )}
 
       {/* ── フィルタ ── */}
       <div className="flex gap-1.5 overflow-x-auto no-bar">

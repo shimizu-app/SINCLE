@@ -7,9 +7,10 @@
 # 必要なもの：postgresql-16（initdb / pg_ctl / psql）
 #
 # 確かめられること
-#   ・001〜022 が空のデータベースに順番どおり当たる
+#   ・001〜023 が空のデータベースに順番どおり当たる
 #   ・登録の連鎖・案件・履歴・書類・キーパーソンが期待どおり動く
 #   ・別のワークスペースからは1件も見えない（RLS）
+#   ・同じワークスペースでも、人の名刺は許可が無ければ見えない（023）
 #
 # Supabase が用意している部分（auth.uid() や storage など）は
 # shim.sql が最小限だけ代役を務める。移行ファイルには手を入れない。
@@ -105,6 +106,13 @@ echo ""
 echo "══ 予約ページ（022）══"
 $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/booking.sql"
+
+echo ""
+echo "══ 名刺の見える範囲（023）══"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
+  -f "$HERE/card_privacy.sql"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
+  -f "$HERE/card_privacy_write.sql"
 
 echo ""
 echo "終わりました。データベースは消します。"

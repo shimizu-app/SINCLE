@@ -131,3 +131,34 @@ export async function setStage(companyId: string, stageId: string | null) {
   revalidatePath(`/customers/${companyId}`);
   revalidatePath("/customers");
 }
+
+/**
+ * チームに共有する・やめる（023）。
+ * 変えられるのは、登録した人・担当者・管理者だけ（データベースの見張りでも止める）。
+ */
+export async function setCompanyShared(
+  companyId: string,
+  shared: boolean
+): Promise<{ error: string } | { ok: true }> {
+  const current = await requireCurrent();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("companies")
+    .update({ shared })
+    .eq("id", companyId)
+    .eq("workspace_id", current.workspace.id)
+    .select("id");
+
+  if (error) {
+    if (error.code === "42501") return { error: "共有を変えられるのは、登録した人・担当者・管理者だけです。" };
+    if (/shared|column/i.test(error.message)) return { error: "データベースの更新（023）がまだです。" };
+    return { error: error.message };
+  }
+  if (!data?.length) return { error: "この会社は変えられません。" };
+
+  revalidatePath(`/customers/${companyId}`);
+  revalidatePath("/customers");
+  revalidatePath("/channels");
+  return { ok: true };
+}
