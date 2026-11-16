@@ -7,38 +7,51 @@ import { requireCurrent } from "@/lib/workspace";
 
 export type ChannelResult = { error: string } | undefined;
 
+/** 送った発言の本物の id。画面の仮の吹き出しを、これに置き換える（2回出ないように） */
+export type PostResult = { id: string; created_at: string } | { error: string };
+
 /** チャンネルに投稿する */
-export async function postMessage(channelId: string, text: string) {
+export async function postMessage(channelId: string, text: string): Promise<PostResult> {
   const current = await requireCurrent();
-  if (!text.trim()) return;
+  if (!text.trim()) return { error: "空のメッセージは送れません。" };
   const supabase = await createClient();
 
-  const { error } = await supabase.from("messages").insert({
-    channel_id: channelId,
-    workspace_id: current.workspace.id,
-    author_id: current.member.id,
-    text: text.trim(),
-  });
-  if (error) return { error: error.message };
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      channel_id: channelId,
+      workspace_id: current.workspace.id,
+      author_id: current.member.id,
+      text: text.trim(),
+    })
+    .select("id, created_at")
+    .single();
+  if (error || !data) return { error: error?.message ?? "送れませんでした。" };
 
   revalidatePath(`/channels/${channelId}`);
+  return data;
 }
 
 /** DM を送る */
-export async function postDm(threadId: string, text: string) {
+export async function postDm(threadId: string, text: string): Promise<PostResult> {
   const current = await requireCurrent();
-  if (!text.trim()) return;
+  if (!text.trim()) return { error: "空のメッセージは送れません。" };
   const supabase = await createClient();
 
-  const { error } = await supabase.from("dm_messages").insert({
-    thread_id: threadId,
-    workspace_id: current.workspace.id,
-    author_id: current.member.id,
-    text: text.trim(),
-  });
-  if (error) return { error: error.message };
+  const { data, error } = await supabase
+    .from("dm_messages")
+    .insert({
+      thread_id: threadId,
+      workspace_id: current.workspace.id,
+      author_id: current.member.id,
+      text: text.trim(),
+    })
+    .select("id, created_at")
+    .single();
+  if (error || !data) return { error: error?.message ?? "送れませんでした。" };
 
   revalidatePath(`/channels/dm/${threadId}`);
+  return data;
 }
 
 export async function markChannelRead(channelId: string) {

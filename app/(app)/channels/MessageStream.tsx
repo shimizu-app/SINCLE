@@ -33,14 +33,30 @@ type Props = {
  * 会話の本体。
  * Realtime で他の人の発言を拾い、自分の発言はその場で足す。
  * RLS はそのまま効くので、読めない行は届かない。
+ *
+ * 自分の発言は、送った瞬間に仮の吹き出し（temp-…）を出し、本物が届いたら置き換える。
+ * 本物は「送信の返事」と「Realtime」の2通りで届き、どちらが先かは決まっていない。
+ * どちらで届いても1つにまとめる（前は仮のものが残って、自分の画面に2回出ていた）。
  */
 export function MessageStream({
   kind, targetId, initial, myMemberId, people, placeholder,
 }: Props) {
   const [messages, setMessages] = useState<StreamMessage[]>(initial);
   const [text, setText] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  // Enter で送るのは、キーボードのある端末だけ。スマホの Enter は改行（変換の確定で誤って送らないように）
+  const [enterSends, setEnterSends] = useState(false);
   const [, start] = useTransition();
   const bottom = useRef<HTMLDivElement>(null);
+  // 同じ文の二重送信を止める（連打・変換確定の Enter）
+  const lastSent = useRef<{ text: string; at: number } | null>(null);
+  // 名前の対応表は描画のたびに作り直されるので、購読し直さないよう ref で持つ
+  const peopleRef = useRef(people);
+  peopleRef.current = people;
+
+  useEffect(() => {
+    setEnterSends(window.matchMedia("(pointer: fine)").matches);
+  }, []);
 
   // 開いたら既読にする
   useEffect(() => {
@@ -71,19 +87,22 @@ export function MessageStream({
           };
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) return prev;
-            const who = row.author_id ? people[row.author_id] : undefined;
-            return [
-              ...prev,
-              {
-                id: row.id,
-                text: row.text,
-                created_at: row.created_at,
-                author_id: row.author_id,
-                author_name: who?.name ?? null,
-                author_avatar: who?.avatar ?? null,
-                is_system: Boolean(row.is_system),
-              },
-            ];
+            const who = row.author_id ? peopleRef.current[row.author_id] : undefined;
+            const real: StreamMessage = {
+              id: row.id,
+              text: row.text,
+              created_at: row.created_at,
+              author_id: row.author_id,
+              author_name: who?.name ?? null,
+              author_avatar: who?.avatar ?? null,
+              is_system: Boolean(row.is_system),
+            };
+            // 自分の発言なら、同じ文の仮の吹き出しを本物に置き換える
+            if (row.author_id === myMemberId && !row.is_system) {
+              const at = prev.findIndex((m) => m.id.startsWith("temp-") && m.text === row.text);
+              if (at >= 0) return prev.map((m, i) => (i === at ? real : m));
+            }
+            return [...prev, real];
           });
         }
       )
@@ -92,27 +111,57 @@ export function MessageStream({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [kind, targetId, people]);
+  }, [kind, targetId, myMemberId]);
 
   function send() {
     const value = text.trim();
     if (!value) return;
-    setText("");
 
-    // 送った実感を先に出す。Realtime で本物が来たら id で重複を弾く。
+    // 同じ文を2秒以内にもう一度は送らない（連打・変換確定の Enter）
+    const now = Date.now();
+    if (lastSent.current && lastSent.current.text === value && now - lastSent.current.at < 2000) {
+      setText("");
+      return;
+    }
+    lastSent.current = { text: value, at: now };
+
+    setText("");
+    setProblem(null);
+
+    // 送った実感を先に出す。本物が届いたら置き換える
+    const tempId = `temp-${now}-${Math.random().toString(36).slice(2, 8)}`;
     const temp: StreamMessage = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       text: value,
-      created_at: new Date().toISOString(),
+      created_at: new Date(now).toISOString(),
       author_id: myMemberId,
-      author_name: people[myMemberId]?.name ?? null,
-      author_avatar: people[myMemberId]?.avatar ?? null,
+      author_name: peopleRef.current[myMemberId]?.name ?? null,
+      author_avatar: peopleRef.current[myMemberId]?.avatar ?? null,
       is_system: false,
     };
     setMessages((prev) => [...prev, temp]);
 
-    start(() => {
-      void (kind === "dm" ? postDm(targetId, value) : postMessage(targetId, value));
+    start(async () => {
+      let r: Awaited<ReturnType<typeof postMessage>>;
+      try {
+        r = await (kind === "dm" ? postDm(targetId, value) : postMessage(targetId, value));
+      } catch {
+        // 圏外など、届かなかった
+        r = { error: "送れませんでした。" };
+      }
+      if ("error" in r) {
+        // 送れなかった。仮の吹き出しを消して、文は入力欄に戻す
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setText((now) => now || value);
+        setProblem("送れませんでした。もう一度お試しください。");
+        lastSent.current = null;
+        return;
+      }
+      setMessages((prev) => {
+        // Realtime が先に本物を届けていれば、仮のものはもう置き換わっている
+        if (prev.some((m) => m.id === r.id)) return prev.filter((m) => m.id !== tempId);
+        return prev.map((m) => (m.id === tempId ? { ...m, id: r.id, created_at: r.created_at } : m));
+      });
     });
   }
 
@@ -181,12 +230,19 @@ export function MessageStream({
         className="fixed left-0 right-0 z-10 px-4 py-3 bg-white"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 76px)", borderTop: `2px solid ${C.line}` }}
       >
+        {problem && (
+          <p className="text-[11px] font-bold text-center pb-2" style={{ color: C.red }} role="alert">
+            {problem}
+          </p>
+        )}
         <div className="flex gap-2 items-end max-w-screen-sm mx-auto">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              // 日本語の変換中の Enter は「確定」。送信にしない（前はここで2回送られていた）
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (enterSends && e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 send();
               }
