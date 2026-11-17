@@ -33,7 +33,7 @@ export default async function DmPage({ params }: { params: Promise<{ id: string 
     // 新しい方から200件。表示の直前に古い順へ戻す。
     supabase
       .from("dm_messages")
-      .select("id, text, created_at, author_id")
+      .select("id, text, created_at, author_id, read_at")
       .eq("thread_id", id)
       .order("created_at", { ascending: false })
       .limit(200),
@@ -54,6 +54,7 @@ export default async function DmPage({ params }: { params: Promise<{ id: string 
     author_name: peopleMap[m.author_id]?.name ?? null,
     author_avatar: peopleMap[m.author_id]?.avatar ?? null,
     is_system: false,
+    read_at: m.read_at,
   }));
 
   return (

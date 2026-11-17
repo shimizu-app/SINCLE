@@ -5,7 +5,7 @@ import { C, companyArt, type ColorKey, type ShapeKey } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { ShapeIcon } from "@/components/ui";
-import { MessageStream, type StreamMessage } from "../MessageStream";
+import { MessageStream, type ReadMark, type StreamMessage } from "../MessageStream";
 import type { Avatar } from "@/types/db";
 
 export default async function ChannelPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +36,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
     !(company?.shared || company?.registered_by === me || company?.owner_id === me);
   const title = channel.kind === "company" ? company?.name ?? "会社" : channel.name ?? "グループ";
 
-  const [{ data: rows }, { data: people }] = await Promise.all([
+  const [{ data: rows }, { data: people }, { data: reads }] = await Promise.all([
     // 新しい方から200件。表示の直前に古い順へ戻す。
     supabase
       .from("messages")
@@ -48,6 +48,8 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
       .from("workspace_members")
       .select("id, name, avatar")
       .eq("workspace_id", current.workspace.id),
+    // だれがどこまで読んだか。自分の発言の「既読 N」に使う
+    supabase.from("channel_members").select("member_id, last_read_at").eq("channel_id", id),
   ]);
 
   const peopleMap = Object.fromEntries(
@@ -110,6 +112,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
         myMemberId={current.member.id}
         people={peopleMap}
         readOnly={readOnly}
+        reads={(reads ?? []) as ReadMark[]}
       />
     </>
   );

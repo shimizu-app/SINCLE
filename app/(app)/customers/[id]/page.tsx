@@ -16,7 +16,7 @@ import { Documents, type DocRow } from "./Documents";
 import { CompanyTasks } from "./CompanyTasks";
 import { CompanyProgress } from "./CompanyProgress";
 import { CompanySharing } from "./CompanySharing";
-import { MessageStream, type StreamMessage } from "../../channels/MessageStream";
+import { MessageStream, type ReadMark, type StreamMessage } from "../../channels/MessageStream";
 import type { Subtask, TaskRow } from "../../tasks/TaskList";
 import { MailList } from "../../mail/MailList";
 import { loadMails } from "../../mail/load";
@@ -188,14 +188,17 @@ export default async function CompanyPage({
 
   // 新しい方から200件取って、表示のために古い順へ戻す。
   // 昇順のまま limit を掛けると、会話が伸びたときに古い200件が出てしまう。
-  const { data: messageRows } = channel
-    ? await supabase
-        .from("messages")
-        .select("id, text, created_at, author_id, is_system")
-        .eq("channel_id", channel.id)
-        .order("created_at", { ascending: false })
-        .limit(200)
-    : { data: [] };
+  const [{ data: messageRows }, { data: readRows }] = channel
+    ? await Promise.all([
+        supabase
+          .from("messages")
+          .select("id, text, created_at, author_id, is_system")
+          .eq("channel_id", channel.id)
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase.from("channel_members").select("member_id, last_read_at").eq("channel_id", channel.id),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   const messages: StreamMessage[] = (messageRows ?? []).reverse().map((m) => ({
     id: m.id,
@@ -453,6 +456,7 @@ export default async function CompanyPage({
             people={peopleMap}
             placeholder={`${company.name} について`}
             readOnly={readOnly}
+            reads={(readRows ?? []) as ReadMark[]}
           />
         ) : (
           <div className="px-4 pb-4">

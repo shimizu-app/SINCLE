@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { CustomerControls } from "./CustomerControls";
 import { CompanyCard } from "./CompanyCard";
 import { GroupCard } from "./GroupCard";
+import { LockedAll } from "./LockedAll";
+import { ScopeSwitch } from "./ScopeSwitch";
 import { DealList, type DealRow, type Owner } from "./DealList";
 import {
   KeyPersons, type ContactOption, type KeyFacet, type KeyPersonRow, type Referral,
@@ -55,9 +57,12 @@ export default async function CustomersPage({
     sort: isSortKey(params.sort) ? params.sort : "new",
   };
 
-  // 全社のまとめは、許可がある人だけ（023）。無い人が ?view=all を開いても、自分の一覧を出す
+  // 「個人」と「会社全体」の切り替え（023）。
+  // 会社全体（全員の登録）は、許可がある人だけが開ける。無い人には鍵をかけて見せる
   const canViewAll = Boolean(current.member.can_view_all);
-  const viewAll = canViewAll && params.view === "all" && tab === "company";
+  const wantAll = params.view === "all";
+  const viewAll = canViewAll && wantAll;
+  const locked = wantAll && !canViewAll;
 
   const [{ companies, counts, facets, error }, groupsRes] = await Promise.all([
     loadCustomers(current.workspace.id, query),
@@ -72,8 +77,19 @@ export default async function CustomersPage({
   const many = (v: string | string[] | undefined) =>
     v === undefined ? undefined : Array.isArray(v) ? v : [v];
 
+  // 鍵の画面に出す管理者（許可をお願いする相手）
+  const { data: admins } = locked
+    ? await supabase
+        .from("workspace_members")
+        .select("id, name")
+        .eq("workspace_id", ws)
+        .eq("is_admin", true)
+        .eq("status", "active")
+        .order("created_at")
+    : { data: [] };
+
   const [dealsRes, ownersRes] =
-    tab === "deals"
+    !wantAll && tab === "deals"
       ? await Promise.all([
           supabase.rpc("list_deals", { p_workspace_id: ws, p_sort: "stale" }),
           supabase
@@ -86,7 +102,7 @@ export default async function CustomersPage({
       : [{ data: [] }, { data: [] }];
 
   const [keyRes, refRes, keyFacetRes, contactRes] =
-    tab === "keypersons"
+    !wantAll && tab === "keypersons"
       ? await Promise.all([
           supabase.rpc("list_key_persons", {
             p_workspace_id: ws,
@@ -123,11 +139,20 @@ export default async function CustomersPage({
     company: c.companies?.name ?? "",
   }));
 
-  const stats = [
-    { label: "社", value: counts.companies, color: "purple" as const },
-    { label: "Tier A", value: counts.tier_a, color: "pink" as const },
-    { label: "未完了", value: counts.open_tasks, color: "yellow" as const },
-  ];
+  const groups = groupsRes.groups;
+  const stats = viewAll
+    ? [
+        { label: "社（会社全体）", value: groups.length, color: "purple" as const },
+        { label: "何人かが登録", value: groups.filter((g) => g.record_count > 1).length, color: "pink" as const },
+        { label: "名刺", value: groups.reduce((n, g) => n + Number(g.contact_count), 0), color: "yellow" as const },
+      ]
+    : locked
+      ? []
+      : [
+          { label: "社", value: counts.companies, color: "purple" as const },
+          { label: "Tier A", value: counts.tier_a, color: "pink" as const },
+          { label: "未完了", value: counts.open_tasks, color: "yellow" as const },
+        ];
 
   const keep = (next: string) => {
     const sp = new URLSearchParams();
@@ -179,6 +204,10 @@ export default async function CustomersPage({
       />
 
       <div className="px-4 py-4 space-y-4">
+        {/* ── 個人 ／ 会社全体 ── */}
+        <ScopeSwitch view={wantAll ? "all" : "mine"} canViewAll={canViewAll} />
+
+        {stats.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {stats.map((s, i) => (
             <div
@@ -199,7 +228,17 @@ export default async function CustomersPage({
             </div>
           ))}
         </div>
+        )}
 
+        {locked && (
+          <LockedAll
+            admins={admins ?? []}
+            isAdmin={current.member.is_admin}
+            myMemberId={current.member.id}
+          />
+        )}
+
+        {!wantAll && (
         <div className="flex gap-1.5">
           {TABS.map((t) => {
             const on = tab === t.key;
@@ -220,31 +259,6 @@ export default async function CustomersPage({
             );
           })}
         </div>
-
-        {tab === "company" && canViewAll && (
-          <div className="flex items-center gap-1.5">
-            {[
-              { key: "mine", label: "自分の", href: "/customers" },
-              { key: "all", label: "全社（全員の登録）", href: "/customers?view=all" },
-            ].map((v) => {
-              const on = (viewAll ? "all" : "mine") === v.key;
-              return (
-                <Link
-                  key={v.key}
-                  href={v.href}
-                  className="text-xs font-extrabold px-3 py-1.5"
-                  style={{
-                    background: on ? C.ink : "#fff",
-                    color: on ? "#fff" : "#6B6B6B",
-                    border: `2px solid ${on ? C.ink : C.line}`,
-                    borderRadius: "12px 6px 12px 6px",
-                  }}
-                >
-                  {v.label}
-                </Link>
-              );
-            })}
-          </div>
         )}
 
         {viewAll && (
@@ -275,14 +289,14 @@ export default async function CustomersPage({
                 {groupsRes.error}
               </p>
             )}
-            {groupsRes.groups.length > 0 ? (
+            {groups.length > 0 ? (
               <div className="space-y-2.5">
-                <p className="text-xs font-bold px-1" style={{ color: "#9AA0A6" }}>
-                  {groupsRes.groups.length}社
-                  {groupsRes.groups.some((g) => g.record_count > 1) &&
-                    `（うち ${groupsRes.groups.filter((g) => g.record_count > 1).length}社は何人かが登録）`}
-                </p>
-                {groupsRes.groups.map((group, i) => (
+                {params.q && (
+                  <p className="text-xs font-bold px-1" style={{ color: "#9AA0A6" }}>
+                    {groups.length}社が該当しました
+                  </p>
+                )}
+                {groups.map((group, i) => (
                   <GroupCard key={group.key} group={group} index={i} />
                 ))}
               </div>
@@ -299,7 +313,7 @@ export default async function CustomersPage({
           </>
         )}
 
-        {tab === "company" && !viewAll && (
+        {!wantAll && tab === "company" && (
           <>
             <CustomerControls facets={facets} />
 
@@ -350,14 +364,14 @@ export default async function CustomersPage({
           </>
         )}
 
-        {tab === "deals" && (
+        {!wantAll && tab === "deals" && (
           <DealList
             deals={(dealsRes.data ?? []) as unknown as DealRow[]}
             owners={(ownersRes.data ?? []) as unknown as Owner[]}
           />
         )}
 
-        {tab === "keypersons" && (
+        {!wantAll && tab === "keypersons" && (
           <KeyPersons
             people={(keyRes.data ?? []) as unknown as KeyPersonRow[]}
             referrals={(refRes.data ?? []) as unknown as Referral[]}

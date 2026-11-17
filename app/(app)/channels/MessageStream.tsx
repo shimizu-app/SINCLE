@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Send } from "lucide-react";
 import { C, SOFT } from "@/lib/design";
 import { MemberDot, ShapeIcon } from "@/components/ui";
@@ -16,7 +16,12 @@ export type StreamMessage = {
   author_name: string | null;
   author_avatar: Avatar | null;
   is_system: boolean;
+  /** DM のとき：相手が読んだ時刻（まだなら null） */
+  read_at?: string | null;
 };
+
+/** チャンネルで、だれがどこまで読んだか（channel_members.last_read_at） */
+export type ReadMark = { member_id: string; last_read_at: string | null };
 
 type Props = {
   kind: "channel" | "dm";
@@ -29,7 +34,15 @@ type Props = {
   placeholder?: string;
   /** 読むだけ（「全員の名刺を見る」で人の会社のチャンネルを見ているとき）。入力欄を出さない */
   readOnly?: boolean;
+  /** チャンネルのとき：参加者ごとの既読の位置。自分の発言の下に「既読 N」を出す */
+  reads?: ReadMark[];
 };
+
+/** Postgres の時刻（"2026-11-16 16:20:00.123456+00" の形でも）をミリ秒に */
+function ms(value: string | null | undefined) {
+  if (!value) return NaN;
+  return Date.parse(value.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00"));
+}
 
 /**
  * 会話の本体。
@@ -41,9 +54,12 @@ type Props = {
  * どちらで届いても1つにまとめる（前は仮のものが残って、自分の画面に2回出ていた）。
  */
 export function MessageStream({
-  kind, targetId, initial, myMemberId, people, placeholder, readOnly = false,
+  kind, targetId, initial, myMemberId, people, placeholder, readOnly = false, reads: initialReads = [],
 }: Props) {
   const [messages, setMessages] = useState<StreamMessage[]>(initial);
+  const [reads, setReads] = useState<ReadMark[]>(initialReads);
+  // 「既読 N」を押したら、だれが読んだかを出す
+  const [openReads, setOpenReads] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   // Enter で送るのは、キーボードのある端末だけ。スマホの Enter は改行（変換の確定で誤って送らないように）
@@ -60,10 +76,31 @@ export function MessageStream({
     setEnterSends(window.matchMedia("(pointer: fine)").matches);
   }, []);
 
-  // 開いたら既読にする
+  // 既読にする。開いたとき・見ている間に新しい発言が届いたとき・画面に戻ってきたとき。
+  // 続けて届いても1回にまとめる。人の会社を見るだけのときは既読をつけない
+  const markTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markRead = useCallback(() => {
+    if (readOnly) return;
+    if (markTimer.current) clearTimeout(markTimer.current);
+    markTimer.current = setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      void (kind === "dm" ? markDmRead(targetId) : markChannelRead(targetId)).catch(() => {});
+    }, 600);
+  }, [kind, targetId, readOnly]);
+  const markReadRef = useRef(markRead);
+  markReadRef.current = markRead;
+
   useEffect(() => {
-    start(() => void (kind === "dm" ? markDmRead(targetId) : markChannelRead(targetId)));
-  }, [kind, targetId]);
+    markRead();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") markRead();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      if (markTimer.current) clearTimeout(markTimer.current);
+    };
+  }, [markRead]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -106,9 +143,38 @@ export function MessageStream({
             }
             return [...prev, real];
           });
+          // 人の発言が届いたら、見ているので既読にする
+          if (row.author_id !== myMemberId) markReadRef.current();
         }
-      )
-      .subscribe();
+      );
+
+    if (kind === "dm") {
+      // 相手が読むと read_at が入る
+      channel.on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "dm_messages", filter: `thread_id=eq.${targetId}` },
+        (payload) => {
+          const row = payload.new as { id: string; read_at: string | null };
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read_at: row.read_at } : m)));
+        }
+      );
+    } else {
+      // だれかがチャンネルを開くと、その人の既読の位置が進む
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "channel_members", filter: `channel_id=eq.${targetId}` },
+        (payload) => {
+          const row = payload.new as { member_id?: string; last_read_at?: string | null };
+          if (!row?.member_id) return;
+          setReads((prev) => {
+            const next = prev.filter((r) => r.member_id !== row.member_id);
+            return [...next, { member_id: row.member_id!, last_read_at: row.last_read_at ?? null }];
+          });
+        }
+      );
+    }
+
+    channel.subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
@@ -167,6 +233,16 @@ export function MessageStream({
     });
   }
 
+  /** 自分の発言を読んだ人（チャンネル）。DM は相手が読んだか */
+  function readersOf(m: StreamMessage): string[] {
+    if (m.id.startsWith("temp-")) return [];
+    if (kind === "dm") return m.read_at ? ["相手"] : [];
+    const at = ms(m.created_at);
+    return reads
+      .filter((r) => r.member_id !== m.author_id && ms(r.last_read_at) >= at)
+      .map((r) => people[r.member_id]?.name ?? "メンバー");
+  }
+
   return (
     <>
       <div className="px-4 py-4 space-y-3 pb-40">
@@ -214,12 +290,39 @@ export function MessageStream({
                 >
                   {m.text}
                 </div>
-                <span className="text-[10px] font-bold px-1" style={{ color: "#C8C2B6" }}>
-                  {new Date(m.created_at).toLocaleTimeString("ja-JP", {
+                {(() => {
+                  const time = new Date(m.created_at).toLocaleTimeString("ja-JP", {
                     hour: "2-digit",
                     minute: "2-digit",
-                  })}
-                </span>
+                  });
+                  const readers = mine ? readersOf(m) : [];
+                  return (
+                    <>
+                      <span className="flex items-center gap-1.5 text-[10px] font-bold px-1" style={{ color: "#C8C2B6" }}>
+                        {readers.length > 0 &&
+                          (kind === "dm" ? (
+                            <span style={{ color: C.purple }}>既読</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setOpenReads((now) => (now === m.id ? null : m.id))}
+                              aria-expanded={openReads === m.id}
+                              className="font-extrabold"
+                              style={{ color: C.purple }}
+                            >
+                              既読 {readers.length}
+                            </button>
+                          ))}
+                        {time}
+                      </span>
+                      {openReads === m.id && readers.length > 0 && kind !== "dm" && (
+                        <span className="text-[10px] font-bold px-1 text-right" style={{ color: "#9AA0A6" }}>
+                          {readers.map((n) => `${n}さん`).join("・")}が読みました
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           );

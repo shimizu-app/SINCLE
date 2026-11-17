@@ -7,7 +7,7 @@
 # 必要なもの：postgresql-16（initdb / pg_ctl / psql）
 #
 # 確かめられること
-#   ・001〜023 が空のデータベースに順番どおり当たる
+#   ・001〜024 が空のデータベースに順番どおり当たる
 #   ・登録の連鎖・案件・履歴・書類・キーパーソンが期待どおり動く
 #   ・別のワークスペースからは1件も見えない（RLS）
 #   ・同じワークスペースでも、人の名刺は許可が無ければ見えない（023）
@@ -113,6 +113,11 @@ $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
   -f "$HERE/card_privacy.sql"
 $PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -q \
   -f "$HERE/card_privacy_write.sql"
+
+echo ""
+echo "══ 既読（024）══"
+$PGBIN/psql -h "$SOCK" -p "$PORT" -U postgres -d syncle -v ON_ERROR_STOP=1 -q \
+  -f "$HERE/read_receipts.sql"
 
 echo ""
 echo "終わりました。データベースは消します。"

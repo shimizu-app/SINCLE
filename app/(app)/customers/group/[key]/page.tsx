@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, Mail, Phone, Users } from "lucide-react";
 import { C, SOFT, DEAL_STATUS } from "@/lib/design";
 import { requireCurrent } from "@/lib/workspace";
@@ -15,7 +15,8 @@ import type { Avatar, Tier } from "@/types/db";
  */
 export default async function CompanyGroupPage({ params }: { params: Promise<{ key: string }> }) {
   const current = await requireCurrent();
-  if (!current.member.can_view_all) notFound();
+  // 許可が無い人には、鍵のかかった「会社全体」を見せる
+  if (!current.member.can_view_all) redirect("/customers?view=all");
 
   const { key: raw } = await params;
   const key = decodeURIComponent(raw);
