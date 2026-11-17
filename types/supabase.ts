@@ -658,6 +658,7 @@ export type Database = {
           company_id: string | null
           contact_id: string | null
           created_at: string
+          created_by: string | null
           duration_min: number
           format: string
           gcal_event_id: string | null
@@ -671,6 +672,7 @@ export type Database = {
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
+          created_by?: string | null
           duration_min?: number
           format?: string
           gcal_event_id?: string | null
@@ -684,6 +686,7 @@ export type Database = {
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
+          created_by?: string | null
           duration_min?: number
           format?: string
           gcal_event_id?: string | null
@@ -1552,6 +1555,10 @@ export type Database = {
           priority: string
           share: string
           title: string
+          end_at: string | null
+          company_id: string | null
+          gcal_event_id: string | null
+          meet_url: string | null
         }[]
       }
       can_read_channel: { Args: { p_channel: string }; Returns: boolean }

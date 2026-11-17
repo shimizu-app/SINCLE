@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TasksClient } from "./TasksClient";
 import { TaskCalendar, type CalendarItem } from "./TaskCalendar";
-import { googleLink, listEvents } from "@/lib/google";
+import { CALENDAR_WRITE_SCOPE, googleLink, listEvents } from "@/lib/google";
 import { Memos, type MemoRow } from "./Memos";
 import type { Subtask, TaskRow, TodoRow } from "./TaskList";
 import { mineFilter } from "@/lib/customers";
@@ -16,7 +16,7 @@ const TABS = [
   { key: "memo", label: "メモ" },
 ] as const;
 
-type Params = { tab?: string; y?: string; m?: string; scope?: string };
+type Params = { tab?: string; y?: string; m?: string; scope?: string; d?: string };
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<Params> }) {
   const current = await requireCurrent();
@@ -25,9 +25,12 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const supabase = await createClient();
   const ws = current.workspace.id;
 
+  // 「今日」は日本時間で数える（サーバーは UTC で動いているので、朝9時までは前の日になってしまう）
   const now = new Date();
-  const year = Number(params.y) || now.getFullYear();
-  const month = Number(params.m) || now.getMonth() + 1;
+  const jstNow = new Date(now.getTime() + 9 * 3600_000);
+  const todayKey = `${jstNow.getUTCFullYear()}-${String(jstNow.getUTCMonth() + 1).padStart(2, "0")}-${String(jstNow.getUTCDate()).padStart(2, "0")}`;
+  const year = Number(params.y) || jstNow.getUTCFullYear();
+  const month = Number(params.m) || jstNow.getUTCMonth() + 1;
   const scope = params.scope ?? "all";
 
   // 月の範囲（前後を少し含めて、月またぎの予定も拾う）
@@ -35,6 +38,15 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const to = new Date(year, month, 0);
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // はじめに開く日：指定があればその日（その月の中なら）、今月なら今日、ほかの月は1日
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+  const initialDay =
+    params.d && /^\d{4}-\d{2}-\d{2}$/.test(params.d) && params.d.startsWith(monthPrefix)
+      ? params.d
+      : todayKey.startsWith(monthPrefix)
+        ? todayKey
+        : iso(from);
 
   const [tasksRes, todosRes, memosRes, companiesRes, membersRes, calendarRes] = await Promise.all([
     supabase.rpc("list_tasks", { p_workspace_id: ws, p_done: false }),
@@ -79,10 +91,12 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   //（あれはチームに向けた予定の一覧で、個人の予定を見せる場所ではない）。
   let googleItems: CalendarItem[] = [];
   let googleState: "connected" | "expired" | "none" = "none";
+  let canWriteGoogle = false;
   if (tab === "calendar" && scope !== "team") {
     const link = await googleLink(ws);
     if (link.state === "connected") {
       googleState = "connected";
+      canWriteGoogle = link.scopes.includes(CALENDAR_WRITE_SCOPE);
       // 月の前後1日まで取る（時差で月の境目の予定が落ちないように）
       const start = new Date(year, month - 1, 0);
       const end = new Date(year, month, 1);
@@ -97,11 +111,20 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         priority: null,
         share: null,
         company_name: null,
+        end_at: e.allDay ? null : e.end,
       }));
     } else if (link.state === "expired") {
       googleState = "expired";
     }
   }
+
+  // SYNCLE から Google にも入れた予定は、Google 側の同じ予定と二重に出さない
+  const ownItems = (calendarRes.data ?? []) as unknown as CalendarItem[];
+  const pushed = new Set(ownItems.map((i) => i.gcal_event_id).filter((v): v is string => Boolean(v)));
+  const calendarItems = [
+    ...ownItems,
+    ...googleItems.filter((g) => !pushed.has(g.id.slice(g.id.indexOf(":") + 1))),
+  ];
 
   // 開いたときだけ引くのは往復が増えるので、一覧ぶんまとめて取る
   const taskIds = tasks.map((t) => t.id);
@@ -158,11 +181,15 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
         {tab === "calendar" && (
           <TaskCalendar
-            items={[...((calendarRes.data ?? []) as unknown as CalendarItem[]), ...googleItems]}
+            items={calendarItems}
             google={googleState}
             year={year}
             month={month}
             scope={scope}
+            initialDay={initialDay}
+            todayKey={todayKey}
+            companies={companiesRes.data ?? []}
+            canWriteGoogle={canWriteGoogle}
           />
         )}
 

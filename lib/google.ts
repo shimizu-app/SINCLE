@@ -355,6 +355,8 @@ export type GoogleEvent = {
   calendarId: string;
   title: string;
   at: string;
+  /** 終わり。終日なら翌日の 0:00（Google の決まり） */
+  end: string | null;
   allDay: boolean;
 };
 
@@ -391,6 +393,7 @@ export async function listEvents(
           status?: string;
           summary?: string;
           start?: { dateTime?: string; date?: string };
+          end?: { dateTime?: string; date?: string };
         }[];
       };
       return (body.items ?? [])
@@ -400,7 +403,9 @@ export async function listEvents(
           calendarId,
           // 非公開の予定は題名が来ない
           title: e.summary?.trim() || "（予定あり）",
-          at: e.start?.dateTime ?? `${e.start?.date}T00:00:00`,
+          // 終日の予定は日付だけで来る。日本時間のその日の 0:00 として持つ
+          at: e.start?.dateTime ?? `${e.start?.date}T00:00:00+09:00`,
+          end: e.end?.dateTime ?? (e.end?.date ? `${e.end.date}T00:00:00+09:00` : null),
           allDay: !e.start?.dateTime,
         }));
     })

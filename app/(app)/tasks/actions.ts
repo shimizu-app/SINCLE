@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrent } from "@/lib/workspace";
+import { CALENDAR_WRITE_SCOPE, createMeeting, deleteMeeting, googleLink } from "@/lib/google";
 import type { Priority, TaskShare } from "@/types/db";
 
 export type ActionResult = { error: string } | { ok: true } | undefined;
@@ -117,6 +118,136 @@ export async function deleteSubtask(id: string) {
   const supabase = await createClient();
   await supabase.from("subtasks").delete().eq("id", id);
   revalidatePath("/tasks");
+}
+
+/* ══════════════ カレンダーから予定を入れる ══════════════ */
+
+export type EventResult = { error: string } | { ok: true; note?: string } | undefined;
+
+/**
+ * 予定（打合せ・用事）を入れる（025）。
+ * 会社を選べばその会社の予定（会社が見える人に見える）、選ばなければ自分だけの予定。
+ * 「Google カレンダーにも入れる」なら、本人の Google カレンダーにも同じ予定を入れる。
+ * Google に入らなくても SYNCLE には残し、そのことを伝える。
+ */
+export async function addCalendarEvent(_prev: EventResult, form: FormData): Promise<EventResult> {
+  const current = await requireCurrent();
+  const supabase = await createClient();
+
+  const title = str(form, "title");
+  const date = str(form, "date");
+  const time = str(form, "time");
+  if (!title) return { error: "題名を入力してください。" };
+  if (title.length > 200) return { error: "題名は200文字までにしてください。" };
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "日付を選んでください。" };
+  if (!time || !/^\d{2}:\d{2}$/.test(time)) return { error: "始まる時刻を選んでください。" };
+
+  const duration = Math.round(Number(str(form, "duration") ?? 60));
+  if (!Number.isFinite(duration) || duration < 5 || duration > 24 * 60) {
+    return { error: "長さは5分〜24時間にしてください。" };
+  }
+
+  const start = new Date(`${date}T${time}:00+09:00`);
+  if (Number.isNaN(start.getTime())) return { error: "日時が正しくありません。" };
+
+  const companyId = str(form, "companyId");
+  const toGoogle = form.get("google") === "on";
+  const meet = form.get("meet") === "on";
+
+  // 会社つきなら、自分の会社か確かめる（書けない会社なら、ここで止める）
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("id", companyId)
+      .eq("workspace_id", current.workspace.id)
+      .maybeSingle();
+    if (!company) return { error: "その会社には予定を入れられません。" };
+  }
+
+  // Google カレンダーにも入れる
+  let gcalId: string | null = null;
+  let meetUrl: string | null = null;
+  let note: string | undefined;
+  if (toGoogle) {
+    const link = await googleLink(current.workspace.id);
+    if (link.state !== "connected") {
+      note = "Google カレンダーがつながっていないので、SYNCLE にだけ入れました。";
+    } else if (!link.scopes.includes(CALENDAR_WRITE_SCOPE)) {
+      note = "Google カレンダーに予定を入れる許可が無いので、SYNCLE にだけ入れました（設定からつなぎ直すと入るようになります）。";
+    } else {
+      const made = await createMeeting(link.token, {
+        title,
+        description: "SYNCLE から入れた予定",
+        start: start.toISOString(),
+        durationMin: duration,
+        attendees: [],
+        meet,
+      });
+      if ("error" in made) {
+        note = `Google カレンダーには入りませんでした（${made.error}）。SYNCLE には入れました。`;
+      } else {
+        gcalId = made.id;
+        meetUrl = made.meetUrl;
+      }
+    }
+  }
+
+  const { error } = await supabase.from("events").insert({
+    workspace_id: current.workspace.id,
+    company_id: companyId,
+    title,
+    starts_at: start.toISOString(),
+    duration_min: duration,
+    format: meet ? "Google Meet" : "対面",
+    meet_url: meetUrl,
+    gcal_event_id: gcalId,
+    created_by: current.member.id,
+  });
+  if (error) {
+    if (/created_by|column/i.test(error.message)) return { error: "データベースの更新（025）がまだです。" };
+    return { error: error.message };
+  }
+
+  revalidatePath("/tasks");
+  if (companyId) revalidatePath(`/customers/${companyId}`);
+  return { ok: true, note };
+}
+
+/**
+ * 入れた予定を消す（自分の予定・自分の会社の予定だけ。RLS でも止める）。
+ * 自分が Google カレンダーにも入れた予定なら、Google 側も取り消す。
+ */
+export async function deleteCalendarEvent(id: string): Promise<{ error: string } | { ok: true }> {
+  const current = await requireCurrent();
+  const supabase = await createClient();
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, gcal_event_id, created_by")
+    .eq("id", id)
+    .eq("workspace_id", current.workspace.id)
+    .maybeSingle();
+  if (!event) return { error: "予定が見つかりません。" };
+
+  const { data: gone, error } = await supabase
+    .from("events")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", current.workspace.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!gone?.length) return { error: "この予定は消せません（人の会社の予定です）。" };
+
+  if (event.gcal_event_id && event.created_by === current.member.id) {
+    const link = await googleLink(current.workspace.id);
+    if (link.state === "connected" && link.scopes.includes(CALENDAR_WRITE_SCOPE)) {
+      await deleteMeeting(link.token, event.gcal_event_id).catch(() => {});
+    }
+  }
+
+  revalidatePath("/tasks");
+  return { ok: true };
 }
 
 /* ══════════════ 個人TODO ══════════════ */
