@@ -93,6 +93,18 @@ export default async function RoadmapPage({ searchParams }: { searchParams: Prom
       />
 
       <div className="py-3 space-y-3">
+        {/* 計画と、自分のやることの区別 */}
+        <div className="px-4">
+          <p
+            className="px-3.5 py-2.5 text-[11px] font-bold leading-relaxed"
+            style={{ background: SOFT.purple, color: C.purple, borderRadius: "14px 7px 14px 7px" }}
+          >
+            計画は<span style={{ color: C.ink }}>チーム全員に共有</span>
+            されます（全員が見て書けます）。担当を決めたやることは、その人の「タスク」にも出ます。
+            自分だけのやることは「タスク」の自分のTODOへ。
+          </p>
+        </div>
+
         {/* ── 部署 ── */}
         <div className="flex gap-2 overflow-x-auto no-bar px-4">
           {DEPTS.map((x) => {

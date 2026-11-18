@@ -7,7 +7,10 @@ import { requireCurrent } from "@/lib/workspace";
 
 export type RegisterResult = { error: string } | undefined;
 
-/** 名刺を1枚登録する。会社・チャンネル・ティア・案件・初回タスクまで一度に出来る。 */
+/**
+ * 名刺を1枚登録する。会社・チャンネル・ティア・案件まで一度に出来る。
+ * 初回フォローのタスクは、選んだ人だけ入れる（026：自動では作らない）。
+ */
 export async function registerContact(
   _prev: RegisterResult,
   formData: FormData
@@ -50,7 +53,30 @@ export async function registerContact(
 
   if (error) return { error: error.message };
 
-  const result = data as { company_id?: string } | null;
+  const result = data as { company_id?: string; contact_id?: string | null } | null;
+
+  if (formData.get("followTask") === "on" && result?.company_id) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name")
+      .eq("id", result.company_id)
+      .maybeSingle();
+    // 3日後（日本時間の日付。時刻なし）
+    const day = new Date(Date.now() + 9 * 3600_000 + 3 * 86400_000).toISOString().slice(0, 10);
+    await supabase.from("tasks").insert({
+      workspace_id: current.workspace.id,
+      company_id: result.company_id,
+      contact_id: result.contact_id ?? null,
+      title: `初回フォロー：${company?.name ?? companyName ?? ""}`.slice(0, 200),
+      due_at: new Date(`${day}T00:00:00+09:00`).toISOString(),
+      due_has_time: false,
+      assignee_id: current.member.id,
+      priority: "中",
+      share: "assignee",
+    });
+    revalidatePath("/tasks");
+  }
+
   revalidatePath("/customers");
   redirect(`/customers/${result?.company_id ?? ""}`);
 }

@@ -42,8 +42,15 @@ select
   (:'reg'::jsonb ->> 'contact_id') is not null as "名刺",
   (:'reg'::jsonb ->> 'deal_id')    is not null as "案件",
   (select tier from public.companies where id = :'company_id'::uuid) as "ティア",
-  (select count(*) from public.tasks    where company_id = :'company_id'::uuid) as "初回タスク",
+  (select count(*) from public.tasks    where company_id = :'company_id'::uuid) as "自動のタスク（026 から0）",
   (select count(*) from public.channels where company_id = :'company_id'::uuid) as "会社チャンネル";
+
+-- 登録の画面で「フォローのタスクも入れる」を選んだときと同じタスクを入れる（画面側で入れる）
+insert into public.tasks (workspace_id, company_id, contact_id, title, due_at, assignee_id, priority, share)
+select :'workspace_id', :'company_id', (:'reg'::jsonb ->> 'contact_id')::uuid,
+       '初回フォロー：ミライ精機株式会社', (now() + interval '3 days')::date::timestamptz,
+       public.my_member_id(:'workspace_id'), '中', 'assignee';
+select count(*) as "選んだときの初回タスク（1）" from public.tasks where company_id = :'company_id'::uuid;
 
 \echo ''
 \echo '── ② 進行中の案件と放置日数（018）──'

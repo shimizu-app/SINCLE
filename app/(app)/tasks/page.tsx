@@ -7,6 +7,7 @@ import { TasksClient } from "./TasksClient";
 import { TaskCalendar, type CalendarItem } from "./TaskCalendar";
 import { CALENDAR_WRITE_SCOPE, googleLink, listEvents } from "@/lib/google";
 import { Memos, type MemoRow } from "./Memos";
+import type { AgendaTodo } from "./AgendaTodos";
 import type { Subtask, TaskRow, TodoRow } from "./TaskList";
 import { mineFilter } from "@/lib/customers";
 
@@ -48,7 +49,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         ? todayKey
         : iso(from);
 
-  const [tasksRes, todosRes, memosRes, companiesRes, membersRes, calendarRes] = await Promise.all([
+  const [tasksRes, todosRes, memosRes, companiesRes, membersRes, calendarRes, agendaRes] = await Promise.all([
     supabase.rpc("list_tasks", { p_workspace_id: ws, p_done: false }),
     supabase
       .from("personal_todos")
@@ -81,6 +82,16 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
           p_to: iso(to),
           p_scope: scope,
         })
+      : Promise.resolve({ data: [] }),
+    // 計画のやることで、自分が担当のもの（計画は全員に共有。自分の分をここにも出す）
+    tab === "list"
+      ? supabase
+          .from("agenda_actions")
+          .select("id, text, done, agenda:agenda_items!inner(id, title, dept, year, month, workspace_id)")
+          .eq("assignee_id", current.member.id)
+          .eq("done", false)
+          .eq("agenda.workspace_id", ws)
+          .order("position")
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -176,6 +187,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             members={membersRes.data ?? []}
             myMemberId={current.member.id}
             groupBy={current.member.task_view === "assignee" ? "assignee" : "company"}
+            agendaTodos={(agendaRes.data ?? []) as unknown as AgendaTodo[]}
           />
         )}
 

@@ -433,12 +433,24 @@ export function NewContactForm({
             </p>
           )}
 
+          <label
+            className="flex items-start gap-2.5 p-3.5 bg-white cursor-pointer"
+            style={{ ...field, borderRadius: "22px 11px 22px 11px" }}
+          >
+            <input type="checkbox" name="followTask" className="w-4 h-4 mt-0.5 shrink-0" />
+            <span className="min-w-0">
+              <span className="block text-sm font-bold">フォローのタスクも入れる</span>
+              <span className="block text-[11px] font-bold" style={{ color: "#9AA0A6" }}>
+                3日後に「初回フォロー」のタスクが入ります。連絡しないなら外したままで。
+              </span>
+            </span>
+          </label>
+
           <div
             className="p-3.5 text-[11px] font-bold leading-relaxed"
             style={{ background: SOFT.purple, color: C.purple, borderRadius: "22px 11px 22px 11px" }}
           >
-            登録すると、会社チャンネル・ティア判定・初回フォロータスク・商談が
-            まとめて用意されます。
+            登録すると、会社チャンネル・ティア判定・商談がまとめて用意されます。
           </div>
 
           <OrganicButton type="submit" size="lg" color="green" className="w-full" disabled={pending}>

@@ -31,10 +31,10 @@ export function GroupSheet({ members }: { members: PickMember[] }) {
         onClick={() => setOpen(true)}
       >
         <Plus size={16} strokeWidth={3} />
-        グループを作る
+        議題を立てる
       </OrganicButton>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="グループ" subtitle="話す場所を作ります">
+      <Sheet open={open} onClose={() => setOpen(false)} title="議題を立てる" subtitle="話したいことごとに、話す場所を作ります">
         <form action={action} className="space-y-3">
           <input type="hidden" name="shape" value={shape} />
           <input type="hidden" name="color" value={color} />
@@ -45,7 +45,7 @@ export function GroupSheet({ members }: { members: PickMember[] }) {
               name="name"
               required
               autoFocus
-              placeholder="チャンネル名"
+              placeholder="議題（例：来月の展示会の段取り）"
               className="flex-1 min-w-0 px-4 py-3 text-base bg-white outline-none"
               style={{ borderRadius: "22px 11px 22px 11px", border: `2px solid ${C.line}` }}
             />

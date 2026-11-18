@@ -7,14 +7,24 @@ import { EmptyState } from "@/components/EmptyState";
 import { MemberDot, ShapeIcon } from "@/components/ui";
 import { GroupSheet, type PickMember } from "./GroupSheet";
 import { MemberRow, type MemberRowData } from "./MemberRow";
+import { deptOf } from "../roadmap/depts";
 import type { Avatar } from "@/types/db";
 
+/*
+ * 話す場所の分け方
+ *   個人     … 1対1
+ *   議題     … 話したいことごとに1つ（計画の議題から始めたものは、計画とつながる）
+ *   お客さま … お客さまの会社ごと（名刺を登録するとできる。記録もここに流れる）
+ */
 const TABS = [
   { key: "dm", label: "個人" },
-  { key: "group", label: "グループ" },
-  { key: "company", label: "会社" },
+  { key: "group", label: "議題" },
+  { key: "company", label: "お客さま" },
   { key: "members", label: "メンバー" },
 ] as const;
+
+/** 計画の議題とつながったチャンネル（020 の agenda_items.channel_id） */
+type AgendaLink = { id: string; title: string; dept: string; year: number; month: number; state: string };
 
 type ChannelRow = {
   id: string;
@@ -54,11 +64,21 @@ export default async function ChannelsPage({
   const supabase = await createClient();
   const ws = current.workspace.id;
 
-  const [channelsRes, dmRes, membersRes] = await Promise.all([
+  const [channelsRes, dmRes, membersRes, agendaRes] = await Promise.all([
     supabase.rpc("list_channels", { p_workspace_id: ws }),
     supabase.rpc("list_dm_threads", { p_workspace_id: ws }),
     supabase.rpc("list_members", { p_workspace_id: ws }),
+    supabase
+      .from("agenda_items")
+      .select("id, title, dept, year, month, state, channel_id")
+      .eq("workspace_id", ws)
+      .not("channel_id", "is", null),
   ]);
+
+  const agendaByChannel = new Map<string, AgendaLink>();
+  for (const a of agendaRes.data ?? []) {
+    if (a.channel_id) agendaByChannel.set(a.channel_id, a);
+  }
 
   const channels = (channelsRes.data ?? []) as unknown as ChannelRow[];
   const dms = (dmRes.data ?? []) as unknown as DmRow[];
@@ -165,33 +185,39 @@ export default async function ChannelsPage({
           </div>
         )}
 
-        {/* ── グループ ── */}
+        {/* ── 議題 ── */}
         {tab === "group" && (
           <div className="space-y-2.5">
+            <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: "#9AA0A6" }}>
+              話したいことごとに1つ。計画の議題からも「チャンネルで話す」で始められ、計画とつながります。
+            </p>
             {groups.length === 0 ? (
               <EmptyState
                 shape="clover"
                 color="green"
-                title="グループはまだありません"
-                desc={"案件ごと・チームごとに話す場所を作れます。"}
+                title="議題はまだありません"
+                desc={"話したいことを立てて、関係する人と話せます。"}
               />
             ) : (
               groups.map((ch, i) => (
-                <ChannelLink key={ch.id} channel={ch} index={i} />
+                <ChannelLink key={ch.id} channel={ch} index={i} agenda={agendaByChannel.get(ch.id) ?? null} />
               ))
             )}
             <GroupSheet members={active as unknown as PickMember[]} />
           </div>
         )}
 
-        {/* ── 会社 ── */}
+        {/* ── お客さま ── */}
         {tab === "company" && (
           <div className="space-y-2.5">
+            <p className="text-[11px] font-bold leading-relaxed px-1" style={{ color: "#9AA0A6" }}>
+              お客さまの会社ごとの相談と記録です。名刺を登録するとできます。
+            </p>
             {companies.length === 0 ? (
               <EmptyState
                 shape="hex"
                 color="purple"
-                title="会社チャンネルはまだありません"
+                title="お客さまのチャンネルはまだありません"
                 desc={"名刺を登録すると自動で作られます。"}
               />
             ) : (
@@ -218,7 +244,17 @@ export default async function ChannelsPage({
   );
 }
 
-function ChannelLink({ channel, index }: { channel: ChannelRow; index: number }) {
+const STATE_LABEL: Record<string, string> = { todo: "話したい", talking: "話し中", decided: "決定" };
+
+function ChannelLink({
+  channel,
+  index,
+  agenda = null,
+}: {
+  channel: ChannelRow;
+  index: number;
+  agenda?: AgendaLink | null;
+}) {
   const art =
     channel.kind === "company"
       ? companyArt(channel.company_industry ?? undefined)
@@ -236,7 +272,15 @@ function ChannelLink({ channel, index }: { channel: ChannelRow; index: number })
     >
       <ShapeIcon shape={art.shape as ShapeKey} color={art.color as ColorKey} size={44} />
       <div className="flex-1 min-w-0">
-        <div className="text-base font-extrabold truncate">{channel.name ?? "（名前なし）"}</div>
+        <div className="text-base font-extrabold truncate">
+          {/* 計画から作ったチャンネルの名前には「議題：」が付いている。このタブでは言わなくてよい */}
+          {(channel.name ?? "（名前なし）").replace(/^議題：/, "")}
+        </div>
+        {agenda && (
+          <div className="text-[10px] font-extrabold truncate" style={{ color: C.purple }}>
+            計画 ・ {deptOf(agenda.dept).name} {agenda.month}月 ・ {STATE_LABEL[agenda.state] ?? ""}
+          </div>
+        )}
         <div className="text-xs font-bold truncate" style={{ color: "#9AA0A6" }}>
           {channel.last_text ?? `${channel.member_count}人`}
         </div>

@@ -16,6 +16,8 @@ const STATES: State[] = ["todo", "talking", "decided"];
 
 function done() {
   revalidatePath("/roadmap");
+  // 計画のやることは、担当の人のタスクにも出ている
+  revalidatePath("/tasks");
 }
 
 /** 話したいことを追加する */

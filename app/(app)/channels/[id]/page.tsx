@@ -6,6 +6,7 @@ import { requireCurrent } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { ShapeIcon } from "@/components/ui";
 import { MessageStream, type ReadMark, type StreamMessage } from "../MessageStream";
+import { deptOf } from "../../roadmap/depts";
 import type { Avatar } from "@/types/db";
 
 export default async function ChannelPage({ params }: { params: Promise<{ id: string }> }) {
@@ -34,9 +35,9 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
   const readOnly =
     channel.kind === "company" &&
     !(company?.shared || company?.registered_by === me || company?.owner_id === me);
-  const title = channel.kind === "company" ? company?.name ?? "会社" : channel.name ?? "グループ";
+  const title = channel.kind === "company" ? company?.name ?? "お客さま" : (channel.name ?? "議題").replace(/^議題：/, "");
 
-  const [{ data: rows }, { data: people }, { data: reads }] = await Promise.all([
+  const [{ data: rows }, { data: people }, { data: reads }, { data: agenda }] = await Promise.all([
     // 新しい方から200件。表示の直前に古い順へ戻す。
     supabase
       .from("messages")
@@ -50,6 +51,15 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
       .eq("workspace_id", current.workspace.id),
     // だれがどこまで読んだか。自分の発言の「既読 N」に使う
     supabase.from("channel_members").select("member_id, last_read_at").eq("channel_id", id),
+    // 計画の議題から始めたチャンネルなら、その議題
+    channel.kind === "group"
+      ? supabase
+          .from("agenda_items")
+          .select("id, dept, year, month")
+          .eq("channel_id", id)
+          .eq("workspace_id", current.workspace.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const peopleMap = Object.fromEntries(
@@ -86,7 +96,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
           style={{ color: "#9AA0A6" }}
         >
           <ChevronLeft size={16} strokeWidth={3} />
-          チャンネル
+          {channel.kind === "company" ? "お客さま" : "議題"}
         </Link>
         <div className="flex items-center gap-2.5">
           <ShapeIcon shape={art.shape as ShapeKey} color={art.color as ColorKey} size={36} />
@@ -99,6 +109,15 @@ export default async function ChannelPage({ params }: { params: Promise<{ id: st
                 style={{ color: C.purple }}
               >
                 会社の詳細を見る
+              </Link>
+            )}
+            {agenda && (
+              <Link
+                href={`/roadmap?ym=${agenda.year}-${String(agenda.month).padStart(2, "0")}&dept=${agenda.dept}`}
+                className="text-[11px] font-bold"
+                style={{ color: C.purple }}
+              >
+                計画の議題を開く（{deptOf(agenda.dept).name}・{agenda.month}月・やること）
               </Link>
             )}
           </div>
